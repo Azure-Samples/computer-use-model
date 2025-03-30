@@ -5,6 +5,7 @@ import platform
 import time
 import pyautogui
 
+
 class LocalComputer:
     """Controls the local computer by using pyautogui to take screenshots and perform actions."""
 

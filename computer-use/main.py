@@ -12,7 +12,9 @@ import openai
 import cua
 from local_computer import LocalComputer
 
+
 def main():
+    """Run the Computer Use Agent (CUA) with specified configuration."""
     logging.basicConfig(level=logging.WARNING, format='%(message)s')
     logging.getLogger("cua").setLevel(logging.DEBUG)
 
@@ -65,6 +67,7 @@ def main():
         if agent.message:
             print(f"Agent: {agent.message}")
             print("")
+
 
 if __name__ == "__main__":
     main()
