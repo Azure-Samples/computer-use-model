@@ -80,11 +80,11 @@ For more information on VM automation with Playwright, please refer to:
 
 ## Demo
 
-The included demo application (`app.py`) demonstrates how to use the CUA framework:
+The included demo application (`main.py`) demonstrates how to use the CUA framework:
 
 1. Start the demo:
 ```bash
-python app.py
+python main.py
 ```
 
 2. Enter your instructions when prompted, or use the `--instructions` parameter to provide them directly.
