@@ -10,7 +10,7 @@ import openai
 
 logger = logging.getLogger(__name__)
 
-class State: # pylint: disable=too-many-instance-attributes
+class State:
     "Tracking and controlling the state."
 
     previous_response_id: str
@@ -150,7 +150,7 @@ class Agent:
     def message(self):
         return self.state.message
 
-    def continue_task(self, user_message=""): # pylint: disable=too-many-branches
+    def continue_task(self, user_message=""):
         screenshot = ""
         previous_response_id = self.state.previous_response_id
         if self.state.next_action == "computer_call_output":
