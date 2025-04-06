@@ -45,20 +45,29 @@ class State:
 class Scaler:
     """Wrapper for a computer instance that performs resizing and coordinate translation."""
 
-    def __init__(self, width, height, computer):
-        self.dimensions = (width, height)
+    def __init__(self, computer, dimensions=None):
         self.computer = computer
+        self.dimensions = dimensions
+        if not self.dimensions:
+            # If no dimensions are given, take a screenshot and scale to fit under 2048px
+            # https://platform.openai.com/docs/guides/images
+            image = self._screenshot()
+            width, height = image.size
+            max_size = 2048
+            longest = max(width, height)
+            if longest <= max_size:
+                self.dimensions = (width, height)
+            else:
+                scale = max_size / longest
+                self.dimensions = (int(width * scale), int(height * scale))
         self.environment = computer.environment
         self.screen_width = -1
         self.screen_height = -1
 
     def screenshot(self) -> str:
-        # Call the underlying computer. Screenshot will be taken after the action
-        screenshot = self.computer.screenshot()
-        screenshot = base64.b64decode(screenshot)
+        # Take a screenshot from the actual computer
+        image = self._screenshot()
         # Scale the screenshot
-        buffer = io.BytesIO(screenshot)
-        image = PIL.Image.open(buffer)
         self.screen_width, self.screen_height = image.size
         width, height = self.dimensions
         ratio = min(width / self.screen_width, height / self.screen_height)
@@ -104,6 +113,13 @@ class Scaler:
             point.x = x
             point.y = y
         self.computer.drag(path)
+
+    def _screenshot(self):
+        # Take screenshot from the actual computer.
+        screenshot = self.computer.screenshot()
+        screenshot = base64.b64decode(screenshot)
+        buffer = io.BytesIO(screenshot)
+        return PIL.Image.open(buffer)
 
     def _point_to_screen_coords(self, x, y):
         width, height = self.dimensions

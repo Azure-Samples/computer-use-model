@@ -39,8 +39,7 @@ def main():
     computer = LocalComputer()
 
     # Scaler is used to resize the screen to a smaller size
-    size = (1024, 768)
-    computer = cua.Scaler(*size, computer)
+    computer = cua.Scaler(computer)
 
     # Agent to run the CUA model and keep track of state
     agent = cua.Agent(client, model, computer)
