@@ -7,10 +7,12 @@ Make sure to install the required packages before running the script.
 import argparse
 import logging
 import os
+
 import openai
 
 import cua
-from local_computer import LocalComputer
+import local_computer
+
 
 def main():
     logging.basicConfig(level=logging.WARNING, format='%(message)s')
@@ -36,7 +38,7 @@ def main():
     model = args.model
 
     # Computer is used to take screenshots and send keystrokes or mouse clicks
-    computer = LocalComputer()
+    computer = local_computer.LocalComputer()
 
     # Scaler is used to resize the screen to a smaller size
     computer = cua.Scaler(computer)

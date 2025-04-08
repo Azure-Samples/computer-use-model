@@ -1,12 +1,13 @@
 
 import base64
 import io
-import time
-import re
 import logging
+import re
+import time
 import typing
-import PIL
+
 import openai
+import PIL
 
 logger = logging.getLogger(__name__)
 
