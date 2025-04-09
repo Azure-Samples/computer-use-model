@@ -1,4 +1,3 @@
-
 import base64
 import io
 import logging
@@ -10,6 +9,7 @@ import openai
 import PIL
 
 logger = logging.getLogger(__name__)
+
 
 class State:
     "Tracking and controlling the state."
@@ -26,31 +26,31 @@ class State:
     def __init__(self, response):
         assert response.status == "completed"
         self.previous_response_id = response.id
-
-        # If the item is a computer call, setting the next action and passing the action arguments.
         for item in response.output:
             if item.type == "computer_call":
                 self.next_action = "computer_call_output"
                 self.previous_computer_id = item.call_id
-                self.computer_action = item.action.type
-                self.computer_action_args = {k: v for k, v in vars(item.action).items() if k != "type"}
+                self.computer_action_args = vars(item.action) | {}
+                self.computer_action = self.computer_action_args.pop("type")
                 self.pending_safety_checks = item.pending_safety_checks
             elif item.type == "reasoning":
-                self.reasoning_summary = "".join([summary.text for summary in item.summary])
+                self.reasoning_summary = "".join([entry.text for entry in item.summary])
             elif item.type == "message":
                 self.next_action = "user_interaction"
                 self.message += item.content[-1].text
             else:
-                raise NotImplementedError(f"Unsupported response output type '{item.type}'.")
+                message = (f"Unsupported response output type '{item.type}'.",)
+                raise NotImplementedError(message)
+
 
 class Scaler:
-    """Wrapper for a computer instance that performs resizing and coordinate translation."""
+    """Wrapper for a computer that performs resizing and coordinate translation."""
 
     def __init__(self, computer, dimensions=None):
         self.computer = computer
         self.dimensions = dimensions
         if not self.dimensions:
-            # If no dimensions are given, take a screenshot and scale to fit under 2048px
+            # If no dimensions are given, take a screenshot and scale to fit in 2048px
             # https://platform.openai.com/docs/guides/images
             image = self._screenshot()
             width, height = image.size
@@ -74,7 +74,8 @@ class Scaler:
         ratio = min(width / self.screen_width, height / self.screen_height)
         new_width = int(self.screen_width * ratio)
         new_height = int(self.screen_height * ratio)
-        resized_image = image.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
+        new_size = (new_width, new_height)
+        resized_image = image.resize(new_size, PIL.Image.Resampling.LANCZOS)
         image = PIL.Image.new("RGB", (width, height), (0, 0, 0))
         image.paste(resized_image, (0, 0))
         buffer = io.BytesIO()
@@ -129,6 +130,7 @@ class Scaler:
         y = y / ratio
         return int(x), int(y)
 
+
 class Agent:
     """CUA agent to start and continue task execution"""
 
@@ -141,10 +143,11 @@ class Agent:
     def start_task(self, user_message):
         tools = [self.computer_tool()]
         response = self.client.responses.create(
-            model = self.model,
-            input = user_message,
-            tools = tools,
-            truncation = "auto")
+            model=self.model,
+            input=user_message,
+            tools=tools,
+            truncation="auto",
+        )
         self.state = State(response)
 
     @property
@@ -179,16 +182,19 @@ class Agent:
             screenshot = self.computer.screenshot()
         if self.state.next_action == "computer_call_output":
             next_input = openai.types.responses.response_input_param.ComputerCallOutput(
-                type = "computer_call_output",
-                call_id = self.state.previous_computer_id,
-                output = openai.types.responses.response_input_param.ResponseComputerToolCallOutputScreenshotParam(
-                    type = "computer_screenshot",
-                    image_url = f"data:image/png;base64,{screenshot}"),
-                acknowledged_safety_checks = self.state.pending_safety_checks)
+                type="computer_call_output",
+                call_id=self.state.previous_computer_id,
+                output=openai.types.responses.response_input_param.ResponseComputerToolCallOutputScreenshotParam(
+                    type="computer_screenshot",
+                    image_url=f"data:image/png;base64,{screenshot}",
+                ),
+                acknowledged_safety_checks=self.state.pending_safety_checks,
+            )
         else:
             next_input = openai.types.responses.response_input_param.Message(
-                role = "user",
-                content = user_message)
+                role="user",
+                content=user_message,
+            )
         tools = [self.computer_tool()]
         self.state = None
         wait_time = 0
@@ -196,12 +202,13 @@ class Agent:
             try:
                 time.sleep(wait_time)
                 next_response = self.client.responses.create(
-                    model = self.model,
-                    input = [next_input],
-                    previous_response_id = previous_response_id,
-                    tools = tools,
-                    reasoning = { "generate_summary": "concise" },
-                    truncation = "auto")
+                    model=self.model,
+                    input=[next_input],
+                    previous_response_id=previous_response_id,
+                    tools=tools,
+                    reasoning={"generate_summary": "concise"},
+                    truncation="auto",
+                )
                 self.state = State(next_response)
                 return
             except openai.RateLimitError as e:
@@ -212,8 +219,8 @@ class Agent:
 
     def computer_tool(self):
         return openai.types.responses.ComputerToolParam(
-            type = "computer_use_preview",
-            display_width = self.computer.dimensions[0],
-            display_height = self.computer.dimensions[1],
-            environment = self.computer.environment
+            type="computer_use_preview",
+            display_width=self.computer.dimensions[0],
+            display_height=self.computer.dimensions[1],
+            environment=self.computer.environment,
         )

@@ -1,4 +1,3 @@
-
 import base64
 import io
 import platform
@@ -8,7 +7,7 @@ import pyautogui
 
 
 class LocalComputer:
-    """Controls the local computer by using pyautogui to take screenshots and perform actions."""
+    """Use pyautogui to take screenshots and perform actions on the local computer."""
 
     def __init__(self):
         screenshot = pyautogui.screenshot()
