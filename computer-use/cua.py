@@ -1,5 +1,6 @@
 import base64
 import io
+import json
 import logging
 import re
 import time
@@ -15,8 +16,10 @@ class State:
     "Tracking and controlling the state."
 
     previous_response_id: str
-    next_action: typing.Literal["user_interaction", "computer_call_output"] = ""
-    previous_computer_id: str = ""
+    next_action: typing.Literal[
+        "user_interaction", "computer_call_output", "function_call"
+    ] = ""
+    call_id: str = ""
     computer_action: str = ""
     computer_action_args: dict = {}
     pending_safety_checks: list = []
@@ -29,7 +32,7 @@ class State:
         for item in response.output:
             if item.type == "computer_call":
                 self.next_action = "computer_call_output"
-                self.previous_computer_id = item.call_id
+                self.call_id = item.call_id
                 self.computer_action_args = vars(item.action) | {}
                 self.computer_action = self.computer_action_args.pop("type")
                 self.pending_safety_checks = item.pending_safety_checks
@@ -38,6 +41,11 @@ class State:
             elif item.type == "message":
                 self.next_action = "user_interaction"
                 self.message += item.content[-1].text
+            elif item.type == "function_call":
+                self.next_action = "function_call"
+                self.call_id = item.call_id
+                self.tool_name = item.name
+                self.tool_args = json.loads(item.arguments)
             else:
                 message = (f"Unsupported response output type '{item.type}'.",)
                 raise NotImplementedError(message)
@@ -139,16 +147,20 @@ class Agent:
         self.model = model
         self.computer = computer
         self.state = None
+        self.tools = {}
 
     def start_task(self, user_message):
-        tools = [self.computer_tool()]
         response = self.client.responses.create(
             model=self.model,
             input=user_message,
-            tools=tools,
+            tools=self.get_tools(),
             truncation="auto",
         )
         self.state = State(response)
+
+    def add_tool(self, tool, func):
+        name = tool["name"]
+        self.tools[name] = (tool, func)
 
     @property
     def requires_user_input(self):
@@ -180,22 +192,29 @@ class Agent:
             method = getattr(self.computer, action)
             method(**action_args)
             screenshot = self.computer.screenshot()
-        if self.state.next_action == "computer_call_output":
             next_input = openai.types.responses.response_input_param.ComputerCallOutput(
                 type="computer_call_output",
-                call_id=self.state.previous_computer_id,
+                call_id=self.state.call_id,
                 output=openai.types.responses.response_input_param.ResponseComputerToolCallOutputScreenshotParam(
                     type="computer_screenshot",
                     image_url=f"data:image/png;base64,{screenshot}",
                 ),
                 acknowledged_safety_checks=self.state.pending_safety_checks,
             )
+        elif self.state.next_action == "function_call":
+            if self.state.tool_name not in self.tools:
+                raise ValueError(f"Unsupported tool '{self.state.tool_name}'.")
+            tool, func = self.tools[self.state.tool_name]
+            result = func(**self.state.tool_args)
+            next_input = openai.types.responses.response_input_param.FunctionCallOutput(
+                type="function_call_output",
+                call_id=self.state.call_id,
+                output=json.dumps(result),
+            )
         else:
             next_input = openai.types.responses.response_input_param.Message(
-                role="user",
-                content=user_message,
+                role="user", content=user_message
             )
-        tools = [self.computer_tool()]
         self.state = None
         wait_time = 0
         for _ in range(10):
@@ -205,7 +224,7 @@ class Agent:
                     model=self.model,
                     input=[next_input],
                     previous_response_id=previous_response_id,
-                    tools=tools,
+                    tools=self.get_tools(),
                     reasoning={"generate_summary": "concise"},
                     truncation="auto",
                 )
@@ -216,6 +235,10 @@ class Agent:
                 wait_time = int(match.group(1)) if match else 10
                 logger.info("Rate limit exceeded. Waiting for %s seconds.", wait_time)
         logger.critical("Max retries exceeded.")
+
+    def get_tools(self):
+        tools = [entry[0] for entry in self.tools.values()]
+        return [self.computer_tool(), *tools]
 
     def computer_tool(self):
         return openai.types.responses.ComputerToolParam(
