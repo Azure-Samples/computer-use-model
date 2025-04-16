@@ -54,7 +54,7 @@ The framework is designed to work directly with your local computer. Here's how 
 
 1. Run the example application:
 ```bash
-python app.py --instructions "Open web browser and go to microsoft.com"
+python main.py --instructions "Open web browser and go to microsoft.com"
 ```
 
 2. The AI model will:
