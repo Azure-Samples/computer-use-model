@@ -35,6 +35,9 @@ class State:
                 self.call_id = item.call_id
                 self.computer_action_args = vars(item.action) | {}
                 self.computer_action = self.computer_action_args.pop("type")
+                if self.computer_action == "drag":
+                    path = [{"x": point.x, "y": point.y} for point in item.action.path]
+                    self.computer_action_args["path"] = path
                 self.pending_safety_checks = item.pending_safety_checks
             elif item.type == "reasoning":
                 self.reasoning_summary = "".join([entry.text for entry in item.summary])
@@ -119,9 +122,9 @@ class Scaler:
 
     def drag(self, path: list[dict[str, int]]) -> None:
         for point in path:
-            x, y = self._point_to_screen_coords(point.x, point.y)
-            point.x = x
-            point.y = y
+            x, y = self._point_to_screen_coords(point["x"], point["y"])
+            point["x"] = x
+            point["y"] = y
         self.computer.drag(path)
 
     def _screenshot(self):

@@ -67,10 +67,10 @@ class LocalComputer:
 
     def drag(self, path: list[dict[str, int]]) -> None:
         if len(path) >= 2:
-            x = path[0].x
-            y = path[0].y
+            x = path[0]["x"]
+            y = path[0]["y"]
             pyautogui.moveTo(x, y, duration=0.5)
             for point in path[1:]:
-                x = point.x
-                y = point.y
+                x = point["x"]
+                y = point["y"]
                 pyautogui.dragTo(x, y, duration=1.0, button="left")
