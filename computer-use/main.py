@@ -28,8 +28,6 @@ def main():
     parser.add_argument("--autoplay", dest="autoplay", action="store_true",
         default=True, help="Autoplay actions without confirmation")
     parser.add_argument("--environment", dest="environment", default="linux")
-    parser.add_argument("--vm-address", dest="vm_address", type=str,
-        default=None, help="The address of the VM to use")
     args = parser.parse_args()
 
     if args.endpoint == "azure":
