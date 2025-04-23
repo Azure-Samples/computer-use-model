@@ -1,57 +1,11 @@
 import base64
 import io
 import json
-import logging
 import re
 import time
-import typing
 
 import openai
 import PIL
-
-logger = logging.getLogger(__name__)
-
-
-class State:
-    "Tracking and controlling the state."
-
-    previous_response_id: str
-    next_action: typing.Literal[
-        "user_interaction", "computer_call_output", "function_call"
-    ] = ""
-    call_id: str = ""
-    computer_action: str = ""
-    computer_action_args: dict = {}
-    pending_safety_checks: list = []
-    reasoning_summary: str = ""
-    message: str = ""
-
-    def __init__(self, response):
-        assert response.status == "completed"
-        self.previous_response_id = response.id
-        for item in response.output:
-            if item.type == "computer_call":
-                self.next_action = "computer_call_output"
-                self.call_id = item.call_id
-                self.computer_action_args = vars(item.action) | {}
-                self.computer_action = self.computer_action_args.pop("type")
-                if self.computer_action == "drag":
-                    path = [{"x": point.x, "y": point.y} for point in item.action.path]
-                    self.computer_action_args["path"] = path
-                self.pending_safety_checks = item.pending_safety_checks
-            elif item.type == "reasoning":
-                self.reasoning_summary = "".join([entry.text for entry in item.summary])
-            elif item.type == "message":
-                self.next_action = "user_interaction"
-                self.message += item.content[-1].text
-            elif item.type == "function_call":
-                self.next_action = "function_call"
-                self.call_id = item.call_id
-                self.tool_name = item.name
-                self.tool_args = json.loads(item.arguments)
-            else:
-                message = (f"Unsupported response output type '{item.type}'.",)
-                raise NotImplementedError(message)
 
 
 class Scaler:
@@ -145,21 +99,22 @@ class Scaler:
 class Agent:
     """CUA agent to start and continue task execution"""
 
-    def __init__(self, client, model, computer):
+    def __init__(self, client, model, computer, logger=None):
         self.client = client
         self.model = model
         self.computer = computer
-        self.state = None
+        self.logger = logger
         self.tools = {}
+        self.repsonse = None
 
     def start_task(self, user_message):
-        response = self.client.responses.create(
+        self.response = self.client.responses.create(
             model=self.model,
             input=user_message,
             tools=self.get_tools(),
             truncation="auto",
         )
-        self.state = State(response)
+        assert self.response.status == "completed"
 
     def add_tool(self, tool, func):
         name = tool["name"]
@@ -167,77 +122,107 @@ class Agent:
 
     @property
     def requires_user_input(self):
-        return self.state.next_action == "user_interaction"
+        return any(item.type == "message" for item in self.response.output)
 
     @property
     def requires_consent(self):
-        return self.state.next_action == "computer_call_output"
+        return any(item.type == "computer_call" for item in self.response.output)
 
     @property
     def pending_safety_checks(self):
-        return self.state.pending_safety_checks
+        items = [item for item in self.response.output if item.type == "computer_call"]
+        return [check for item in items for check in item.pending_safety_checks]
 
     @property
     def reasoning_summary(self):
-        return self.state.reasoning_summary
+        items = [item for item in self.response.output if item.type == "reasoning"]
+        return "".join([summary.text for item in items for summary in item.summary])
 
     @property
     def message(self):
-        return self.state.message
+        messages = [item for item in self.response.output if item.type == "message"]
+        return "".join([item.content[-1].text for item in messages])
+
+    @property
+    def actions(self):
+        actions = []
+        for item in self.response.output:
+            if item.type == "computer_call":
+                action_args = vars(item.action) | {}
+                action = action_args.pop("type")
+                if action == "drag":
+                    path = [{"x": point.x, "y": point.y} for point in item.action.path]
+                    action_args["path"] = path
+                actions.append((action, action_args))
+        return actions
 
     def continue_task(self, user_message=""):
+        next_input = None
         screenshot = ""
-        previous_response_id = self.state.previous_response_id
-        if self.state.next_action == "computer_call_output":
-            action = self.state.computer_action
-            action_args = self.state.computer_action_args
-            logger.info("%s %s", action, action_args)
-            method = getattr(self.computer, action)
-            method(**action_args)
-            screenshot = self.computer.screenshot()
-            next_input = openai.types.responses.response_input_param.ComputerCallOutput(
-                type="computer_call_output",
-                call_id=self.state.call_id,
-                output=openai.types.responses.response_input_param.ResponseComputerToolCallOutputScreenshotParam(
-                    type="computer_screenshot",
-                    image_url=f"data:image/png;base64,{screenshot}",
-                ),
-                acknowledged_safety_checks=self.state.pending_safety_checks,
-            )
-        elif self.state.next_action == "function_call":
-            if self.state.tool_name not in self.tools:
-                raise ValueError(f"Unsupported tool '{self.state.tool_name}'.")
-            tool, func = self.tools[self.state.tool_name]
-            result = func(**self.state.tool_args)
-            next_input = openai.types.responses.response_input_param.FunctionCallOutput(
-                type="function_call_output",
-                call_id=self.state.call_id,
-                output=json.dumps(result),
-            )
-        else:
-            next_input = openai.types.responses.response_input_param.Message(
-                role="user", content=user_message
-            )
-        self.state = None
-        wait_time = 0
+        response_input_param = openai.types.responses.response_input_param
+        for item in self.response.output:
+            if item.type == "computer_call":
+                assert next_input is None
+                action, action_args = self.actions[0]
+                method = getattr(self.computer, action)
+                method(**action_args)
+                screenshot = self.computer.screenshot()
+                next_input = response_input_param.ComputerCallOutput(
+                    type="computer_call_output",
+                    call_id=item.call_id,
+                    output=response_input_param.ResponseComputerToolCallOutputScreenshotParam(
+                        type="computer_screenshot",
+                        image_url=f"data:image/png;base64,{screenshot}",
+                    ),
+                    acknowledged_safety_checks=self.pending_safety_checks,
+                )
+            elif item.type == "function_call":
+                assert next_input is None
+                tool_name = item.name
+                tool_args = json.loads(item.arguments)
+                if tool_name not in self.tools:
+                    raise ValueError(f"Unsupported tool '{tool_name}'.")
+                tool, func = self.tools[tool_name]
+                result = func(**tool_args)
+                next_input = response_input_param.FunctionCallOutput(
+                    type="function_call_output",
+                    call_id=item.call_id,
+                    output=json.dumps(result),
+                )
+            elif item.type == "message":
+                assert next_input is None
+                next_input = response_input_param.Message(
+                    role="user", content=user_message
+                )
+            elif item.type == "reasoning":
+                pass
+            else:
+                message = (f"Unsupported response output type '{item.type}'.",)
+                raise NotImplementedError(message)
+        previous_response = self.response
+        self.response = None
+        wait = 0
         for _ in range(10):
             try:
-                time.sleep(wait_time)
-                next_response = self.client.responses.create(
+                time.sleep(wait)
+                self.response = self.client.responses.create(
                     model=self.model,
                     input=[next_input],
-                    previous_response_id=previous_response_id,
+                    previous_response_id=previous_response.id,
                     tools=self.get_tools(),
                     reasoning={"generate_summary": "concise"},
                     truncation="auto",
                 )
-                self.state = State(next_response)
+                assert self.response.status == "completed"
                 return
             except openai.RateLimitError as e:
                 match = re.search(r"Please try again in (\d+)s", e.message)
-                wait_time = int(match.group(1)) if match else 10
-                logger.info("Rate limit exceeded. Waiting for %s seconds.", wait_time)
-        logger.critical("Max retries exceeded.")
+                wait = int(match.group(1)) if match else 10
+                if self.logger:
+                    message = f"Rate limit exceeded. Waiting for {wait} seconds."
+                    self.logger.info(message)
+        if self.logger:
+            self.logger.critical("Max retries exceeded.")
 
     def get_tools(self):
         tools = [entry[0] for entry in self.tools.values()]

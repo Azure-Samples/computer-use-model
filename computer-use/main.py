@@ -14,8 +14,10 @@ import openai
 
 
 def main():
+
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
-    logging.getLogger("cua").setLevel(logging.DEBUG)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--instructions", dest="instructions",
@@ -54,27 +56,29 @@ def main():
     if args.instructions:
         user_message = args.instructions
     else:
-        user_message = input("Please enter the initial task for the computer: ")
+        user_message = input("Please enter the initial task: ")
 
-    print(f"User: {user_message}")
+    logger.info(f"User: {user_message}")
     agent.start_task(user_message)
     while True:
         user_message = None
         if agent.requires_consent and not args.autoplay:
             input("Press Enter to run computer tool...")
         elif agent.pending_safety_checks and not args.autoplay:
-            print(f"Safety checks: {agent.pending_safety_checks}")
+            logger.info(f"Safety checks: {agent.pending_safety_checks}")
             input("Press Enter to acknowledge and continue...")
         elif agent.requires_user_input:
+            logger.info("")
             user_message = input("User: ")
         agent.continue_task(user_message)
-        print("")
         if agent.reasoning_summary:
-            print(f"Action: {agent.reasoning_summary}")
+            logger.info("")
+            logger.info(f"Action: {agent.reasoning_summary}")
+        for action, action_args in agent.actions:
+            logger.info(f"  {action} {action_args}")
         if agent.message:
-            print(f"Agent: {agent.message}")
-            print("")
-
+            logger.info("")
+            logger.info(f"Agent: {agent.message}")
 
 if __name__ == "__main__":
     main()
