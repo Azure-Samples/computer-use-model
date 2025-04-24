@@ -37,13 +37,24 @@ pip install -r requirements.txt
 ```
 
 3. Set up your environment variables:
+
+**For macOS or Linux:**
 ```bash
-# For Azure OpenAI
+# Azure OpenAI
 export AZURE_OPENAI_ENDPOINT="your-azure-endpoint"
 export AZURE_OPENAI_API_KEY="your-azure-api-key"
 
-# For OpenAI
+# OpenAI
 export OPENAI_API_KEY="your-openai-api-key"
+```
+**For Windows:**
+```powershell
+# Azure OpenAI
+setx AZURE_OPENAI_ENDPOINT "your-azure-endpoint"
+setx AZURE_OPENAI_API_KEY "your-azure-api-key"
+
+# OpenAI
+setx OPENAI_API_KEY "your-openai-api-key"
 ```
 
 ## Usage
