@@ -47,7 +47,7 @@ def main():
     computer = local_computer.LocalComputer()
 
     # Scaler is used to resize the screen to a smaller size
-    computer = cua.Scaler(computer)
+    computer = cua.Scaler(computer, (1024, 768))
 
     # Agent to run the CUA model and keep track of state
     agent = cua.Agent(client, model, computer)
@@ -62,14 +62,14 @@ def main():
     agent.start_task(user_message)
     while True:
         user_message = None
-        if agent.requires_consent and not args.autoplay:
+        if agent.requires_user_input:
+            logger.info("")
+            user_message = input("User: ")
+        elif agent.requires_consent and not args.autoplay:
             input("Press Enter to run computer tool...")
         elif agent.pending_safety_checks and not args.autoplay:
             logger.info(f"Safety checks: {agent.pending_safety_checks}")
             input("Press Enter to acknowledge and continue...")
-        elif agent.requires_user_input:
-            logger.info("")
-            user_message = input("User: ")
         agent.continue_task(user_message)
         if agent.reasoning_summary:
             logger.info("")

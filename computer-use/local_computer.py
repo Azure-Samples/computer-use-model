@@ -10,8 +10,7 @@ class LocalComputer:
     """Use pyautogui to take screenshots and perform actions on the local computer."""
 
     def __init__(self):
-        screenshot = pyautogui.screenshot()
-        self.dimensions = screenshot.size
+        self.dimensions = None
         system = platform.system()
         if system == "Windows":
             self.environment = "windows"
@@ -21,6 +20,15 @@ class LocalComputer:
             self.environment = "linux"
         else:
             raise NotImplementedError(f"Unsupported operating system: '{system}'")
+
+    def get_environment(self):
+        return self.environment
+
+    def get_dimensions(self):
+        if not self.dimensions:
+            screenshot = pyautogui.screenshot()
+            self.dimensions = screenshot.size
+        return self.dimensions
 
     def screenshot(self) -> str:
         screenshot = pyautogui.screenshot()

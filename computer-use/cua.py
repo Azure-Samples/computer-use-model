@@ -14,11 +14,17 @@ class Scaler:
     def __init__(self, computer, dimensions=None):
         self.computer = computer
         self.dimensions = dimensions
+        self.screen_width = -1
+        self.screen_height = -1
+
+    def get_environment(self):
+        return self.computer.get_environment()
+
+    def get_dimensions(self):
         if not self.dimensions:
             # If no dimensions are given, take a screenshot and scale to fit in 2048px
             # https://platform.openai.com/docs/guides/images
-            image = self._screenshot()
-            width, height = image.size
+            width, height = self.computer.get_dimensions()
             max_size = 2048
             longest = max(width, height)
             if longest <= max_size:
@@ -26,16 +32,17 @@ class Scaler:
             else:
                 scale = max_size / longest
                 self.dimensions = (int(width * scale), int(height * scale))
-        self.environment = computer.environment
-        self.screen_width = -1
-        self.screen_height = -1
+        return self.dimensions
 
     def screenshot(self) -> str:
         # Take a screenshot from the actual computer
-        image = self._screenshot()
+        screenshot = self.computer.screenshot()
+        screenshot = base64.b64decode(screenshot)
+        buffer = io.BytesIO(screenshot)
+        image = PIL.Image.open(buffer)
         # Scale the screenshot
         self.screen_width, self.screen_height = image.size
-        width, height = self.dimensions
+        width, height = self.get_dimensions()
         ratio = min(width / self.screen_width, height / self.screen_height)
         new_width = int(self.screen_width * ratio)
         new_height = int(self.screen_height * ratio)
@@ -81,15 +88,8 @@ class Scaler:
             point["y"] = y
         self.computer.drag(path)
 
-    def _screenshot(self):
-        # Take screenshot from the actual computer.
-        screenshot = self.computer.screenshot()
-        screenshot = base64.b64decode(screenshot)
-        buffer = io.BytesIO(screenshot)
-        return PIL.Image.open(buffer)
-
     def _point_to_screen_coords(self, x, y):
-        width, height = self.dimensions
+        width, height = self.get_dimensions()
         ratio = min(width / self.screen_width, height / self.screen_height)
         x = x / ratio
         y = y / ratio
@@ -122,7 +122,10 @@ class Agent:
 
     @property
     def requires_user_input(self):
-        return any(item.type == "message" for item in self.response.output)
+        return not any(
+            item.type in ("computer_call", "function_call")
+            for item in self.response.output
+        )
 
     @property
     def requires_consent(self):
@@ -229,9 +232,11 @@ class Agent:
         return [self.computer_tool(), *tools]
 
     def computer_tool(self):
+        environment = self.computer.get_environment()
+        dimensions = self.computer.get_dimensions()
         return openai.types.responses.ComputerToolParam(
             type="computer_use_preview",
-            display_width=self.computer.dimensions[0],
-            display_height=self.computer.dimensions[1],
-            environment=self.computer.environment,
+            display_width=dimensions[0],
+            display_height=dimensions[1],
+            environment=environment,
         )
