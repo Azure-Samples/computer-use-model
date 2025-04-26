@@ -66,11 +66,17 @@ class LocalComputer:
         pyautogui.moveTo(x, y, duration=0.1)
 
     def keypress(self, keys: list[str]) -> None:
+        keys = [key.lower() for key in keys]
+        keymap = {
+            "arrowdown": "down",
+            "arrowleft": "left",
+            "arrowright": "right",
+            "arrowup": "up",
+        }
+        keys = [keymap.get(key, key) for key in keys]
         for key in keys:
-            key = key.lower()
             pyautogui.keyDown(key)
         for key in keys:
-            key = key.lower()
             pyautogui.keyUp(key)
 
     def drag(self, path: list[dict[str, int]]) -> None:
