@@ -160,17 +160,17 @@ class Agent:
         return actions
 
     def continue_task(self, user_message=""):
-        next_input = None
+        inputs = []
         screenshot = ""
         response_input_param = openai.types.responses.response_input_param
         for item in self.response.output:
             if item.type == "computer_call":
-                assert next_input is None
+                assert len(inputs) == 0
                 action, action_args = self.actions[0]
                 method = getattr(self.computer, action)
                 method(**action_args)
                 screenshot = self.computer.screenshot()
-                next_input = response_input_param.ComputerCallOutput(
+                output = response_input_param.ComputerCallOutput(
                     type="computer_call_output",
                     call_id=item.call_id,
                     output=response_input_param.ResponseComputerToolCallOutputScreenshotParam(
@@ -179,24 +179,26 @@ class Agent:
                     ),
                     acknowledged_safety_checks=self.pending_safety_checks,
                 )
+                inputs.append(output)
+            elif item.type == "message":
+                assert len(inputs) == 0
+                message = response_input_param.Message(
+                    role="user", content=user_message
+                )
+                inputs.append(message)
             elif item.type == "function_call":
-                assert next_input is None
                 tool_name = item.name
                 tool_args = json.loads(item.arguments)
                 if tool_name not in self.tools:
                     raise ValueError(f"Unsupported tool '{tool_name}'.")
                 tool, func = self.tools[tool_name]
                 result = func(**tool_args)
-                next_input = response_input_param.FunctionCallOutput(
+                output = response_input_param.FunctionCallOutput(
                     type="function_call_output",
                     call_id=item.call_id,
                     output=json.dumps(result),
                 )
-            elif item.type == "message":
-                assert next_input is None
-                next_input = response_input_param.Message(
-                    role="user", content=user_message
-                )
+                inputs.append(output)
             elif item.type == "reasoning":
                 pass
             else:
@@ -210,7 +212,7 @@ class Agent:
                 time.sleep(wait)
                 self.response = self.client.responses.create(
                     model=self.model,
-                    input=[next_input],
+                    input=inputs,
                     previous_response_id=previous_response.id,
                     tools=self.get_tools(),
                     reasoning={"generate_summary": "concise"},
