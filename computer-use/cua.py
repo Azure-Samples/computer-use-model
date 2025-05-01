@@ -107,25 +107,16 @@ class Agent:
         self.tools = {}
         self.repsonse = None
 
-    def start_task(self, user_message):
-        self.response = self.client.responses.create(
-            model=self.model,
-            input=user_message,
-            tools=self.get_tools(),
-            truncation="auto",
-        )
-        assert self.response.status == "completed"
-
     def add_tool(self, tool, func):
         name = tool["name"]
         self.tools[name] = (tool, func)
 
     @property
     def requires_user_input(self):
-        return not any(
-            item.type in ("computer_call", "function_call")
-            for item in self.response.output
-        )
+        if self.response is None or len(self.response.output) == 0:
+            return True
+        item = self.response.output[-1]
+        return item.type == "message" and item.role == "assistant"
 
     @property
     def requires_consent(self):
@@ -143,8 +134,7 @@ class Agent:
 
     @property
     def message(self):
-        messages = [item for item in self.response.output if item.type == "message"]
-        return "".join([item.content[-1].text for item in messages])
+        return self.response.output_text if self.response else ""
 
     @property
     def actions(self):
@@ -159,56 +149,54 @@ class Agent:
                 actions.append((action, action_args))
         return actions
 
+    def start_task(self):
+        self.response = None
+
     def continue_task(self, user_message=""):
         inputs = []
         screenshot = ""
         response_input_param = openai.types.responses.response_input_param
-        for item in self.response.output:
-            if item.type == "computer_call":
-                if (len(inputs) > 0):
-                    types = ", ".join([item.type for item in self.response.output])
-                    raise ValueError(f"Unexpected '{item.type}' in '{types}'.")
-                action, action_args = self.actions[0]
-                method = getattr(self.computer, action)
-                method(**action_args)
-                screenshot = self.computer.screenshot()
-                output = response_input_param.ComputerCallOutput(
-                    type="computer_call_output",
-                    call_id=item.call_id,
-                    output=response_input_param.ResponseComputerToolCallOutputScreenshotParam(
-                        type="computer_screenshot",
-                        image_url=f"data:image/png;base64,{screenshot}",
-                    ),
-                    acknowledged_safety_checks=self.pending_safety_checks,
-                )
-                inputs.append(output)
-            elif item.type == "message":
-                if (len(inputs) > 0):
-                    types = ", ".join([item.type for item in self.response.output])
-                    raise ValueError(f"Unexpected '{item.type}' in '{types}'.")
-                message = response_input_param.Message(
-                    role="user", content=user_message
-                )
-                inputs.append(message)
-            elif item.type == "function_call":
-                tool_name = item.name
-                tool_args = json.loads(item.arguments)
-                if tool_name not in self.tools:
-                    raise ValueError(f"Unsupported tool '{tool_name}'.")
-                tool, func = self.tools[tool_name]
-                result = func(**tool_args)
-                output = response_input_param.FunctionCallOutput(
-                    type="function_call_output",
-                    call_id=item.call_id,
-                    output=json.dumps(result),
-                )
-                inputs.append(output)
-            elif item.type == "reasoning":
-                pass
-            else:
-                message = (f"Unsupported response output type '{item.type}'.",)
-                raise NotImplementedError(message)
         previous_response = self.response
+        previous_response_id = None
+        if previous_response:
+            previous_response_id = previous_response.id
+            for item in previous_response.output:
+                if item.type == "computer_call":
+                    action, action_args = self.actions[0]
+                    method = getattr(self.computer, action)
+                    method(**action_args)
+                    screenshot = self.computer.screenshot()
+                    output = response_input_param.ComputerCallOutput(
+                        type="computer_call_output",
+                        call_id=item.call_id,
+                        output=response_input_param.ResponseComputerToolCallOutputScreenshotParam(
+                            type="computer_screenshot",
+                            image_url=f"data:image/png;base64,{screenshot}",
+                        ),
+                        acknowledged_safety_checks=self.pending_safety_checks,
+                    )
+                    inputs.append(output)
+                elif item.type == "function_call":
+                    tool_name = item.name
+                    tool_args = json.loads(item.arguments)
+                    if tool_name not in self.tools:
+                        raise ValueError(f"Unsupported tool '{tool_name}'.")
+                    tool, func = self.tools[tool_name]
+                    result = func(**tool_args)
+                    output = response_input_param.FunctionCallOutput(
+                        type="function_call_output",
+                        call_id=item.call_id,
+                        output=json.dumps(result),
+                    )
+                    inputs.append(output)
+                elif item.type == "reasoning" or item.type == "message":
+                    pass
+                else:
+                    message = (f"Unsupported response output type '{item.type}'.",)
+                    raise NotImplementedError(message)
+        if user_message:
+            message = response_input_param.Message(role="user", content=user_message)
+            inputs.append(message)
         self.response = None
         wait = 0
         for _ in range(10):
@@ -217,7 +205,7 @@ class Agent:
                 self.response = self.client.responses.create(
                     model=self.model,
                     input=inputs,
-                    previous_response_id=previous_response.id,
+                    previous_response_id=previous_response_id,
                     tools=self.get_tools(),
                     reasoning={"generate_summary": "concise"},
                     truncation="auto",

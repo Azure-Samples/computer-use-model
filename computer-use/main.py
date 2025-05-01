@@ -54,23 +54,23 @@ def main():
 
     # Get the user request
     if args.instructions:
-        user_message = args.instructions
+        user_input = args.instructions
     else:
-        user_message = input("Please enter the initial task: ")
+        user_input = input("Please enter the initial task: ")
 
-    logger.info(f"User: {user_message}")
-    agent.start_task(user_message)
+    logger.info(f"User: {user_input}")
+    agent.start_task()
     while True:
-        user_message = None
-        if agent.requires_user_input:
+        if not user_input and agent.requires_user_input:
             logger.info("")
-            user_message = input("User: ")
-        elif agent.requires_consent and not args.autoplay:
+            user_input = input("User: ")
+        agent.continue_task(user_input)
+        user_input = None
+        if agent.requires_consent and not args.autoplay:
             input("Press Enter to run computer tool...")
         elif agent.pending_safety_checks and not args.autoplay:
             logger.info(f"Safety checks: {agent.pending_safety_checks}")
             input("Press Enter to acknowledge and continue...")
-        agent.continue_task(user_message)
         if agent.reasoning_summary:
             logger.info("")
             logger.info(f"Action: {agent.reasoning_summary}")
