@@ -5,6 +5,7 @@ Make sure to install the required packages before running the script.
 """
 
 import argparse
+import asyncio
 import logging
 import os
 
@@ -13,7 +14,7 @@ import local_computer
 import openai
 
 
-def main():
+async def main():
 
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ def main():
         if not user_input and agent.requires_user_input:
             logger.info("")
             user_input = input("User: ")
-        agent.continue_task(user_input)
+        await agent.continue_task(user_input)
         user_input = None
         if agent.requires_consent and not args.autoplay:
             input("Press Enter to run computer tool...")
@@ -81,4 +82,4 @@ def main():
             logger.info(f"Agent: {agent.message}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

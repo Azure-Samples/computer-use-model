@@ -1,4 +1,5 @@
 import base64
+import inspect
 import io
 import json
 import re
@@ -13,36 +14,38 @@ class Scaler:
 
     def __init__(self, computer, dimensions=None):
         self.computer = computer
-        self.dimensions = dimensions
+        self.size = dimensions
         self.screen_width = -1
         self.screen_height = -1
 
-    def get_environment(self):
-        return self.computer.get_environment()
+    @property
+    def environment(self):
+        return self.computer.environment
 
-    def get_dimensions(self):
-        if not self.dimensions:
+    @property
+    def dimensions(self):
+        if not self.size:
             # If no dimensions are given, take a screenshot and scale to fit in 2048px
             # https://platform.openai.com/docs/guides/images
-            width, height = self.computer.get_dimensions()
+            width, height = self.computer.dimensions
             max_size = 2048
             longest = max(width, height)
             if longest <= max_size:
-                self.dimensions = (width, height)
+                self.size = (width, height)
             else:
                 scale = max_size / longest
-                self.dimensions = (int(width * scale), int(height * scale))
-        return self.dimensions
+                self.size = (int(width * scale), int(height * scale))
+        return self.size
 
-    def screenshot(self) -> str:
+    async def screenshot(self) -> str:
         # Take a screenshot from the actual computer
-        screenshot = self.computer.screenshot()
+        screenshot = await self.computer.screenshot()
         screenshot = base64.b64decode(screenshot)
         buffer = io.BytesIO(screenshot)
         image = PIL.Image.open(buffer)
         # Scale the screenshot
         self.screen_width, self.screen_height = image.size
-        width, height = self.get_dimensions()
+        width, height = self.dimensions
         ratio = min(width / self.screen_width, height / self.screen_height)
         new_width = int(self.screen_width * ratio)
         new_height = int(self.screen_height * ratio)
@@ -56,40 +59,40 @@ class Scaler:
         data = bytearray(buffer.getvalue())
         return base64.b64encode(data).decode("utf-8")
 
-    def click(self, x: int, y: int, button: str = "left") -> None:
+    async def click(self, x: int, y: int, button: str = "left") -> None:
         x, y = self._point_to_screen_coords(x, y)
-        self.computer.click(x, y, button=button)
+        await self.computer.click(x, y, button=button)
 
-    def double_click(self, x: int, y: int) -> None:
+    async def double_click(self, x: int, y: int) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        self.computer.double_click(x, y)
+        await self.computer.double_click(x, y)
 
-    def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
+    async def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        self.computer.scroll(x, y, scroll_x, scroll_y)
+        await self.computer.scroll(x, y, scroll_x, scroll_y)
 
-    def type(self, text: str) -> None:
-        self.computer.type(text)
+    async def type(self, text: str) -> None:
+        await self.computer.type(text)
 
-    def wait(self, ms: int = 1000) -> None:
-        self.computer.wait(ms)
+    async def wait(self, ms: int = 1000) -> None:
+        await self.computer.wait(ms)
 
-    def move(self, x: int, y: int) -> None:
+    async def move(self, x: int, y: int) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        self.computer.move(x, y)
+        await self.computer.move(x, y)
 
-    def keypress(self, keys: list[str]) -> None:
-        self.computer.keypress(keys)
+    async def keypress(self, keys: list[str]) -> None:
+        await self.computer.keypress(keys)
 
-    def drag(self, path: list[dict[str, int]]) -> None:
+    async def drag(self, path: list[dict[str, int]]) -> None:
         for point in path:
             x, y = self._point_to_screen_coords(point["x"], point["y"])
             point["x"] = x
             point["y"] = y
-        self.computer.drag(path)
+        await self.computer.drag(path)
 
     def _point_to_screen_coords(self, x, y):
-        width, height = self.get_dimensions()
+        width, height = self.dimensions
         ratio = min(width / self.screen_width, height / self.screen_height)
         x = x / ratio
         y = y / ratio
@@ -152,7 +155,7 @@ class Agent:
     def start_task(self):
         self.response = None
 
-    def continue_task(self, user_message=""):
+    async def continue_task(self, user_message=""):
         inputs = []
         screenshot = ""
         response_input_param = openai.types.responses.response_input_param
@@ -164,8 +167,12 @@ class Agent:
                 if item.type == "computer_call":
                     action, action_args = self.actions[0]
                     method = getattr(self.computer, action)
-                    method(**action_args)
-                    screenshot = self.computer.screenshot()
+                    if action != "screenshot":
+                        if inspect.iscoroutinefunction(method):
+                            await method(**action_args)
+                        else:
+                            method(**action_args)
+                    screenshot = await self.computer.screenshot()
                     output = response_input_param.ComputerCallOutput(
                         type="computer_call_output",
                         call_id=item.call_id,
@@ -182,7 +189,10 @@ class Agent:
                     if tool_name not in self.tools:
                         raise ValueError(f"Unsupported tool '{tool_name}'.")
                     tool, func = self.tools[tool_name]
-                    result = func(**tool_args)
+                    if inspect.iscoroutinefunction(method):
+                        result = await func(**tool_args)
+                    else:
+                        result = func(**tool_args)
                     output = response_input_param.FunctionCallOutput(
                         type="function_call_output",
                         call_id=item.call_id,
@@ -226,8 +236,8 @@ class Agent:
         return [self.computer_tool(), *tools]
 
     def computer_tool(self):
-        environment = self.computer.get_environment()
-        dimensions = self.computer.get_dimensions()
+        environment = self.computer.environment
+        dimensions = self.computer.dimensions
         return openai.types.responses.ComputerToolParam(
             type="computer_use_preview",
             display_width=dimensions[0],
