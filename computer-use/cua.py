@@ -84,11 +84,8 @@ class Scaler:
     async def keypress(self, keys: list[str]) -> None:
         await self.computer.keypress(keys)
 
-    async def drag(self, path: list[dict[str, int]]) -> None:
-        for point in path:
-            x, y = self._point_to_screen_coords(point["x"], point["y"])
-            point["x"] = x
-            point["y"] = y
+    async def drag(self, path: list[tuple[int, int]]) -> None:
+        path = [self._point_to_screen_coords(*point) for point in path]
         await self.computer.drag(path)
 
     def _point_to_screen_coords(self, x, y):
@@ -147,7 +144,7 @@ class Agent:
                 action_args = vars(item.action) | {}
                 action = action_args.pop("type")
                 if action == "drag":
-                    path = [{"x": point.x, "y": point.y} for point in item.action.path]
+                    path = [(point.x, point.y) for point in item.action.path]
                     action_args["path"] = path
                 actions.append((action, action_args))
         return actions

@@ -80,12 +80,15 @@ class LocalComputer:
         for key in keys:
             pyautogui.keyUp(key)
 
-    async def drag(self, path: list[dict[str, int]]) -> None:
-        if len(path) >= 2:
-            x = path[0]["x"]
-            y = path[0]["y"]
-            pyautogui.moveTo(x, y, duration=0.5)
+    async def drag(self, path: list[tuple[int, int]]) -> None:
+        if len(path) <= 1:
+            pass
+        elif len(path) == 2:
+            pyautogui.moveTo(*path[0], duration=0.5)
+            pyautogui.dragTo(*path[1], duration=1.0, button="left")
+        else:
+            pyautogui.moveTo(*path[0], duration=0.5)
+            pyautogui.mouseDown(button="left")
             for point in path[1:]:
-                x = point["x"]
-                y = point["y"]
-                pyautogui.dragTo(x, y, duration=1.0, button="left")
+                pyautogui.dragTo(*point, duration=1.0, mouseDownUp=False)
+            pyautogui.mouseUp(button="left")
