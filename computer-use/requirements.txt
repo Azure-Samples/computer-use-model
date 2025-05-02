@@ -1,8 +1,10 @@
 openai>=1.68.2
 pyautogui>=0.9.54
+
 requests>=2.31.0
-Pillow>=10.2.0  # Python Imaging Library
 python-dotenv>=1.0.1
 pynput>=1.7.6
 mss>=9.0.1  # For taking screenshots
 numpy>=1.26.4
+Pillow>=11.1.0
+

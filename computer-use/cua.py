@@ -1,70 +1,56 @@
-
 import base64
+import inspect
 import io
-import time
+import json
 import re
-import logging
-import typing
-import PIL
+import time
+
 import openai
+import PIL
 
-logger = logging.getLogger(__name__)
-
-class State: # pylint: disable=too-many-instance-attributes
-    "Tracking and controlling the state."
-
-    previous_response_id: str
-    next_action: typing.Literal["user_interaction", "computer_call_output"] = ""
-    previous_computer_id: str = ""
-    computer_action: str = ""
-    computer_action_args: dict = {}
-    pending_safety_checks: list = []
-    reasoning_summary: str = ""
-    message: str = ""
-
-    def __init__(self, response):
-        assert response.status == "completed"
-        self.previous_response_id = response.id
-
-        # If the item is a computer call, setting the next action and passing the action arguments.
-        for item in response.output:
-            if item.type == "computer_call":
-                self.next_action = "computer_call_output"
-                self.previous_computer_id = item.call_id
-                self.computer_action = item.action.type
-                self.computer_action_args = {k: v for k, v in vars(item.action).items() if k != "type"}
-                self.pending_safety_checks = item.pending_safety_checks
-            elif item.type == "reasoning":
-                self.reasoning_summary = "".join([summary.text for summary in item.summary])
-            elif item.type == "message":
-                self.next_action = "user_interaction"
-                self.message += item.content[-1].text
-            else:
-                raise NotImplementedError(f"Unsupported response output type '{item.type}'.")
 
 class Scaler:
-    """Wrapper for a computer instance that performs resizing and coordinate translation."""
+    """Wrapper for a computer that performs resizing and coordinate translation."""
 
-    def __init__(self, width, height, computer):
-        self.dimensions = (width, height)
+    def __init__(self, computer, dimensions=None):
         self.computer = computer
-        self.environment = computer.environment
+        self.size = dimensions
         self.screen_width = -1
         self.screen_height = -1
 
-    def screenshot(self) -> str:
-        # Call the underlying computer. Screenshot will be taken after the action
-        screenshot = self.computer.screenshot()
+    @property
+    def environment(self):
+        return self.computer.environment
+
+    @property
+    def dimensions(self):
+        if not self.size:
+            # If no dimensions are given, take a screenshot and scale to fit in 2048px
+            # https://platform.openai.com/docs/guides/images
+            width, height = self.computer.dimensions
+            max_size = 2048
+            longest = max(width, height)
+            if longest <= max_size:
+                self.size = (width, height)
+            else:
+                scale = max_size / longest
+                self.size = (int(width * scale), int(height * scale))
+        return self.size
+
+    async def screenshot(self) -> str:
+        # Take a screenshot from the actual computer
+        screenshot = await self.computer.screenshot()
         screenshot = base64.b64decode(screenshot)
-        # Scale the screenshot
         buffer = io.BytesIO(screenshot)
         image = PIL.Image.open(buffer)
+        # Scale the screenshot
         self.screen_width, self.screen_height = image.size
         width, height = self.dimensions
         ratio = min(width / self.screen_width, height / self.screen_height)
         new_width = int(self.screen_width * ratio)
         new_height = int(self.screen_height * ratio)
-        resized_image = image.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
+        new_size = (new_width, new_height)
+        resized_image = image.resize(new_size, PIL.Image.Resampling.LANCZOS)
         image = PIL.Image.new("RGB", (width, height), (0, 0, 0))
         image.paste(resized_image, (0, 0))
         buffer = io.BytesIO()
@@ -73,37 +59,34 @@ class Scaler:
         data = bytearray(buffer.getvalue())
         return base64.b64encode(data).decode("utf-8")
 
-    def click(self, x: int, y: int, button: str = "left") -> None:
+    async def click(self, x: int, y: int, button: str = "left") -> None:
         x, y = self._point_to_screen_coords(x, y)
-        self.computer.click(x, y, button=button)
+        await self.computer.click(x, y, button=button)
 
-    def double_click(self, x: int, y: int) -> None:
+    async def double_click(self, x: int, y: int) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        self.computer.double_click(x, y)
+        await self.computer.double_click(x, y)
 
-    def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
+    async def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        self.computer.scroll(x, y, scroll_x, scroll_y)
+        await self.computer.scroll(x, y, scroll_x, scroll_y)
 
-    def type(self, text: str) -> None:
-        self.computer.type(text)
+    async def type(self, text: str) -> None:
+        await self.computer.type(text)
 
-    def wait(self, ms: int = 1000) -> None:
-        self.computer.wait(ms)
+    async def wait(self, ms: int = 1000) -> None:
+        await self.computer.wait(ms)
 
-    def move(self, x: int, y: int) -> None:
+    async def move(self, x: int, y: int) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        self.computer.move(x, y)
+        await self.computer.move(x, y)
 
-    def keypress(self, keys: list[str]) -> None:
-        self.computer.keypress(keys)
+    async def keypress(self, keys: list[str]) -> None:
+        await self.computer.keypress(keys)
 
-    def drag(self, path: list[dict[str, int]]) -> None:
-        for point in path:
-            x, y = self._point_to_screen_coords(point.x, point.y)
-            point.x = x
-            point.y = y
-        self.computer.drag(path)
+    async def drag(self, path: list[tuple[int, int]]) -> None:
+        path = [self._point_to_screen_coords(*point) for point in path]
+        await self.computer.drag(path)
 
     def _point_to_screen_coords(self, x, y):
         width, height = self.dimensions
@@ -112,91 +95,149 @@ class Scaler:
         y = y / ratio
         return int(x), int(y)
 
+
 class Agent:
     """CUA agent to start and continue task execution"""
 
-    def __init__(self, client, model, computer):
+    def __init__(self, client, model, computer, logger=None):
         self.client = client
         self.model = model
         self.computer = computer
-        self.state = None
+        self.logger = logger
+        self.tools = {}
+        self.repsonse = None
 
-    def start_task(self, user_message):
-        tools = [self.computer_tool()]
-        response = self.client.responses.create(
-            model = self.model,
-            input = user_message,
-            tools = tools,
-            truncation = "auto")
-        self.state = State(response)
+    def add_tool(self, tool, func):
+        name = tool["name"]
+        self.tools[name] = (tool, func)
 
     @property
     def requires_user_input(self):
-        return self.state.next_action == "user_interaction"
+        if self.response is None or len(self.response.output) == 0:
+            return True
+        item = self.response.output[-1]
+        return item.type == "message" and item.role == "assistant"
 
     @property
     def requires_consent(self):
-        return self.state.next_action == "computer_call_output"
+        return any(item.type == "computer_call" for item in self.response.output)
 
     @property
     def pending_safety_checks(self):
-        return self.state.pending_safety_checks
+        items = [item for item in self.response.output if item.type == "computer_call"]
+        return [check for item in items for check in item.pending_safety_checks]
 
     @property
     def reasoning_summary(self):
-        return self.state.reasoning_summary
+        items = [item for item in self.response.output if item.type == "reasoning"]
+        return "".join([summary.text for item in items for summary in item.summary])
 
     @property
     def message(self):
-        return self.state.message
+        return self.response.output_text if self.response else ""
 
-    def continue_task(self, user_message=""): # pylint: disable=too-many-branches
+    @property
+    def actions(self):
+        actions = []
+        for item in self.response.output:
+            if item.type == "computer_call":
+                action_args = vars(item.action) | {}
+                action = action_args.pop("type")
+                if action == "drag":
+                    path = [(point.x, point.y) for point in item.action.path]
+                    action_args["path"] = path
+                actions.append((action, action_args))
+        return actions
+
+    def start_task(self):
+        self.response = None
+
+    async def continue_task(self, user_message=""):
+        inputs = []
         screenshot = ""
-        previous_response_id = self.state.previous_response_id
-        if self.state.next_action == "computer_call_output":
-            action = self.state.computer_action
-            action_args = self.state.computer_action_args
-            logger.info("%s %s", action, action_args)
-            method = getattr(self.computer, action)
-            method(**action_args)
-            screenshot = self.computer.screenshot()
-        if self.state.next_action == "computer_call_output":
-            next_input = openai.types.responses.response_input_param.ComputerCallOutput(
-                type = "computer_call_output",
-                call_id = self.state.previous_computer_id,
-                output = openai.types.responses.response_input_param.ResponseComputerToolCallOutputScreenshotParam(
-                    type = "computer_screenshot",
-                    image_url = f"data:image/png;base64,{screenshot}"),
-                acknowledged_safety_checks = self.state.pending_safety_checks)
-        else:
-            next_input = openai.types.responses.response_input_param.Message(
-                role = "user",
-                content = user_message)
-        tools = [self.computer_tool()]
-        self.state = None
-        wait_time = 0
+        response_input_param = openai.types.responses.response_input_param
+        previous_response = self.response
+        previous_response_id = None
+        if previous_response:
+            previous_response_id = previous_response.id
+            for item in previous_response.output:
+                if item.type == "computer_call":
+                    action, action_args = self.actions[0]
+                    method = getattr(self.computer, action)
+                    if action != "screenshot":
+                        if inspect.iscoroutinefunction(method):
+                            await method(**action_args)
+                        else:
+                            method(**action_args)
+                    screenshot = await self.computer.screenshot()
+                    output = response_input_param.ComputerCallOutput(
+                        type="computer_call_output",
+                        call_id=item.call_id,
+                        output=response_input_param.ResponseComputerToolCallOutputScreenshotParam(
+                            type="computer_screenshot",
+                            image_url=f"data:image/png;base64,{screenshot}",
+                        ),
+                        acknowledged_safety_checks=self.pending_safety_checks,
+                    )
+                    inputs.append(output)
+                elif item.type == "function_call":
+                    tool_name = item.name
+                    tool_args = json.loads(item.arguments)
+                    if tool_name not in self.tools:
+                        raise ValueError(f"Unsupported tool '{tool_name}'.")
+                    tool, func = self.tools[tool_name]
+                    if inspect.iscoroutinefunction(method):
+                        result = await func(**tool_args)
+                    else:
+                        result = func(**tool_args)
+                    output = response_input_param.FunctionCallOutput(
+                        type="function_call_output",
+                        call_id=item.call_id,
+                        output=json.dumps(result),
+                    )
+                    inputs.append(output)
+                elif item.type == "reasoning" or item.type == "message":
+                    pass
+                else:
+                    message = (f"Unsupported response output type '{item.type}'.",)
+                    raise NotImplementedError(message)
+        if user_message:
+            message = response_input_param.Message(role="user", content=user_message)
+            inputs.append(message)
+        self.response = None
+        wait = 0
         for _ in range(10):
             try:
-                time.sleep(wait_time)
-                next_response = self.client.responses.create(
-                    model = self.model,
-                    input = [next_input],
-                    previous_response_id = previous_response_id,
-                    tools = tools,
-                    reasoning = { "generate_summary": "concise" },
-                    truncation = "auto")
-                self.state = State(next_response)
+                time.sleep(wait)
+                self.response = self.client.responses.create(
+                    model=self.model,
+                    input=inputs,
+                    previous_response_id=previous_response_id,
+                    tools=self.get_tools(),
+                    reasoning={"generate_summary": "concise"},
+                    truncation="auto",
+                )
+                assert self.response.status == "completed"
                 return
             except openai.RateLimitError as e:
                 match = re.search(r"Please try again in (\d+)s", e.message)
-                wait_time = int(match.group(1)) if match else 10
-                logger.info("Rate limit exceeded. Waiting for %s seconds.", wait_time)
-        logger.critical("Max retries exceeded.")
+                wait = int(match.group(1)) if match else 10
+                if self.logger:
+                    message = f"Rate limit exceeded. Waiting for {wait} seconds."
+                    self.logger.info(message)
+        if self.logger:
+            self.logger.critical("Max retries exceeded.")
+
+    def get_tools(self):
+        tools = [entry[0] for entry in self.tools.values()]
+        return [self.computer_tool(), *tools]
 
     def computer_tool(self):
+        environment = self.computer.environment
+        dimensions = self.computer.dimensions
         return openai.types.responses.ComputerToolParam(
-            type = "computer_use_preview",
-            display_width = self.computer.dimensions[0],
-            display_height = self.computer.dimensions[1],
-            environment = self.computer.environment
+            type="computer_use_preview",
+            display_width=dimensions[0],
+            display_height=dimensions[1],
+            environment=environment,
         )
