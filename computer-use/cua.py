@@ -1,9 +1,9 @@
+import asyncio
 import base64
 import inspect
 import io
 import json
 import re
-import time
 
 import openai
 import PIL
@@ -186,7 +186,7 @@ class Agent:
                     if tool_name not in self.tools:
                         raise ValueError(f"Unsupported tool '{tool_name}'.")
                     tool, func = self.tools[tool_name]
-                    if inspect.iscoroutinefunction(method):
+                    if inspect.iscoroutinefunction(func):
                         result = await func(**tool_args)
                     else:
                         result = func(**tool_args)
@@ -208,8 +208,8 @@ class Agent:
         wait = 0
         for _ in range(10):
             try:
-                time.sleep(wait)
-                self.response = self.client.responses.create(
+                await asyncio.sleep(wait)
+                self.response = await self.client.responses.create(
                     model=self.model,
                     input=inputs,
                     previous_response_id=previous_response_id,
