@@ -77,9 +77,9 @@ async def main():
             logger.info(f"Action: {agent.reasoning_summary}")
         for action, action_args in agent.actions:
             logger.info(f"  {action} {action_args}")
-        if agent.message:
+        if agent.messages:
             logger.info("")
-            logger.info(f"Agent: {agent.message}")
+            logger.info(f"Agent: {"".join(agent.messages)}")
 
 if __name__ == "__main__":
     asyncio.run(main())

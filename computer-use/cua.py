@@ -133,8 +133,15 @@ class Agent:
         return "".join([summary.text for item in items for summary in item.summary])
 
     @property
-    def message(self):
-        return self.response.output_text if self.response else ""
+    def messages(self) -> list[str]:
+        result: list[str] = []
+        if self.response:
+            for item in self.response.output:
+                if item.type == "message":
+                    for content in item.content:
+                        if content.type == "output_text":
+                            result.append(content.text)
+        return result
 
     @property
     def actions(self):
