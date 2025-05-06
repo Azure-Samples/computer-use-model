@@ -14,11 +14,13 @@ import local_computer
 import openai
 
 
+
 async def main():
 
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
+
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--instructions", dest="instructions",
@@ -80,6 +82,7 @@ async def main():
         if agent.messages:
             logger.info("")
             logger.info(f"Agent: {"".join(agent.messages)}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
