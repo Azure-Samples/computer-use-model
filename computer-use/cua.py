@@ -12,7 +12,7 @@ import PIL
 class Scaler:
     """Wrapper for a computer that performs resizing and coordinate translation."""
 
-    def __init__(self, computer, dimensions=None):
+    def __init__(self, computer, dimensions: tuple[int, int] | None = None):
         self.computer = computer
         self.size = dimensions
         self.screen_width = -1
@@ -99,7 +99,7 @@ class Scaler:
 class Agent:
     """CUA agent to start and continue task execution"""
 
-    def __init__(self, client, model, computer, logger=None):
+    def __init__(self, client, model: str, computer, logger=None):
         self.client = client
         self.model = model
         self.computer = computer
@@ -107,19 +107,19 @@ class Agent:
         self.tools = {}
         self.repsonse = None
 
-    def add_tool(self, tool, func):
+    def add_tool(self, tool: str, func):
         name = tool["name"]
         self.tools[name] = (tool, func)
 
     @property
-    def requires_user_input(self):
+    def requires_user_input(self) -> bool:
         if self.response is None or len(self.response.output) == 0:
             return True
         item = self.response.output[-1]
         return item.type == "message" and item.role == "assistant"
 
     @property
-    def requires_consent(self):
+    def requires_consent(self) -> bool:
         return any(item.type == "computer_call" for item in self.response.output)
 
     @property
@@ -165,11 +165,12 @@ class Agent:
                     action, action_args = self.actions[0]
                     method = getattr(self.computer, action)
                     if action != "screenshot":
-                        if inspect.iscoroutinefunction(method):
-                            await method(**action_args)
-                        else:
-                            method(**action_args)
-                    screenshot = await self.computer.screenshot()
+                        result = method(**action_args)
+                        if inspect.isawaitable(result):
+                            result = await result
+                    screenshot = self.computer.screenshot()
+                    if inspect.isawaitable(screenshot):
+                        screenshot = await screenshot
                     output = response_input_param.ComputerCallOutput(
                         type="computer_call_output",
                         call_id=item.call_id,
@@ -186,10 +187,9 @@ class Agent:
                     if tool_name not in self.tools:
                         raise ValueError(f"Unsupported tool '{tool_name}'.")
                     tool, func = self.tools[tool_name]
-                    if inspect.iscoroutinefunction(func):
-                        result = await func(**tool_args)
-                    else:
-                        result = func(**tool_args)
+                    result = func(**tool_args)
+                    if inspect.isawaitable(result):
+                        result = await result
                     output = response_input_param.FunctionCallOutput(
                         type="function_call_output",
                         call_id=item.call_id,
@@ -209,7 +209,7 @@ class Agent:
         for _ in range(10):
             try:
                 await asyncio.sleep(wait)
-                self.response = await self.client.responses.create(
+                self.response = self.client.responses.create(
                     model=self.model,
                     input=inputs,
                     previous_response_id=previous_response_id,
@@ -217,6 +217,8 @@ class Agent:
                     reasoning={"generate_summary": "concise"},
                     truncation="auto",
                 )
+                if inspect.isawaitable(self.response):
+                    self.response = await self.response
                 assert self.response.status == "completed"
                 return
             except openai.RateLimitError as e:
@@ -228,11 +230,11 @@ class Agent:
         if self.logger:
             self.logger.critical("Max retries exceeded.")
 
-    def get_tools(self):
+    def get_tools(self) -> list[openai.types.responses.tool_param.ToolParam]:
         tools = [entry[0] for entry in self.tools.values()]
         return [self.computer_tool(), *tools]
 
-    def computer_tool(self):
+    def computer_tool(self) -> openai.types.responses.ComputerToolParam:
         environment = self.computer.environment
         dimensions = self.computer.dimensions
         return openai.types.responses.ComputerToolParam(
