@@ -159,7 +159,7 @@ class Agent:
     def start_task(self):
         self.response = None
 
-    async def continue_task(self, user_message=""):
+    async def continue_task(self, user_message: str = "", temperature = None):
         inputs = []
         screenshot = ""
         response_input_param = openai.types.responses.response_input_param
@@ -222,6 +222,7 @@ class Agent:
                     previous_response_id=previous_response_id,
                     tools=self.get_tools(),
                     reasoning={"generate_summary": "concise"},
+                    temperature=temperature,
                     truncation="auto",
                 )
                 if inspect.isawaitable(self.response):
