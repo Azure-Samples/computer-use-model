@@ -159,7 +159,7 @@ class Agent:
     def start_task(self):
         self.response = None
 
-    async def continue_task(self, user_message: str = "", temperature = None):
+    async def continue_task(self, user_message: str = "", temperature=None):
         inputs = []
         screenshot = ""
         response_input_param = openai.types.responses.response_input_param
@@ -172,12 +172,11 @@ class Agent:
                     action, action_args = self.actions[0]
                     method = getattr(self.computer, action)
                     if action != "screenshot":
-                        result = method(**action_args)
-                        if inspect.isawaitable(result):
-                            result = await result
-                    screenshot = self.computer.screenshot()
-                    if inspect.isawaitable(screenshot):
-                        screenshot = await screenshot
+                        if inspect.iscoroutinefunction(method):
+                            result = await method(**action_args)
+                        else:
+                            result = method(**action_args)
+                    screenshot = await self.computer.screenshot()
                     output = response_input_param.ComputerCallOutput(
                         type="computer_call_output",
                         call_id=item.call_id,
@@ -194,9 +193,10 @@ class Agent:
                     if tool_name not in self.tools:
                         raise ValueError(f"Unsupported tool '{tool_name}'.")
                     tool, func = self.tools[tool_name]
-                    result = func(**tool_args)
-                    if inspect.isawaitable(result):
-                        result = await result
+                    if inspect.iscoroutinefunction(func):
+                        result = await func(**tool_args)
+                    else:
+                        result = func(**tool_args)
                     output = response_input_param.FunctionCallOutput(
                         type="function_call_output",
                         call_id=item.call_id,
@@ -213,20 +213,24 @@ class Agent:
             inputs.append(message)
         self.response = None
         wait = 0
-        for _ in range(10):
+        retry = 10
+        while retry > 0:
+            retry -= 1
             try:
                 await asyncio.sleep(wait)
-                self.response = self.client.responses.create(
-                    model=self.model,
-                    input=inputs,
-                    previous_response_id=previous_response_id,
-                    tools=self.get_tools(),
-                    reasoning={"generate_summary": "concise"},
-                    temperature=temperature,
-                    truncation="auto",
-                )
-                if inspect.isawaitable(self.response):
-                    self.response = await self.response
+                kwargs = {
+                    "model": self.model,
+                    "input": inputs,
+                    "previous_response_id": previous_response_id,
+                    "tools": self.get_tools(),
+                    "reasoning": {"generate_summary": "concise"},
+                    "temperature": temperature,
+                    "truncation": "auto",
+                }
+                if isinstance(self.client, openai.AsyncOpenAI):
+                    self.response = await self.client.responses.create(**kwargs)
+                else:
+                    self.response = self.client.responses.create(**kwargs)
                 assert self.response.status == "completed"
                 return
             except openai.RateLimitError as e:
@@ -234,9 +238,15 @@ class Agent:
                 wait = int(match.group(1)) if match else 10
                 if self.logger:
                     message = f"Rate limit exceeded. Waiting for {wait} seconds."
-                    self.logger.info(message)
-        if self.logger:
-            self.logger.critical("Max retries exceeded.")
+                    self.logger.warning(message)
+                if retry == 0:
+                    raise
+            except openai.InternalServerError as e:
+                if self.logger:
+                    message = f"Internal server error: {e.message}"
+                    self.logger.error(message)
+                if retry == 0:
+                    raise
 
     def get_tools(self) -> list[openai.types.responses.tool_param.ToolParam]:
         tools = [entry[0] for entry in self.tools.values()]
