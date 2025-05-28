@@ -106,6 +106,8 @@ class Agent:
         self.logger = logger
         self.tools = {}
         self.repsonse = None
+        self.extra_headers = None
+        self.parallel_tool_calls = False
 
     def add_tool(self, tool: dict, func):
         name = tool["name"]
@@ -226,6 +228,8 @@ class Agent:
                     "reasoning": {"generate_summary": "concise"},
                     "temperature": temperature,
                     "truncation": "auto",
+                    "extra_headers": self.extra_headers,
+                    "parallel_tool_calls": self.parallel_tool_calls,
                 }
                 if isinstance(self.client, openai.AsyncOpenAI):
                     self.response = await self.client.responses.create(**kwargs)
@@ -237,14 +241,18 @@ class Agent:
                 match = re.search(r"Please try again in (\d+)s", e.message)
                 wait = int(match.group(1)) if match else 10
                 if self.logger:
-                    message = f"Rate limit exceeded. Waiting for {wait} seconds."
-                    self.logger.warning(message)
+                    self.logger.exception(
+                        f"Rate limit exceeded. Waiting for {wait} seconds.",
+                        exc_info=e,
+                    )
                 if retry == 0:
                     raise
             except openai.InternalServerError as e:
                 if self.logger:
-                    message = f"Internal server error: {e.message}"
-                    self.logger.error(message)
+                    self.logger.exception(
+                        f"Internal server error: {e.message}",
+                        exc_info=e,
+                    )
                 if retry == 0:
                     raise
 
