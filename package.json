@@ -1,0 +1,14 @@
+{
+  "name": "computer-use-model",
+  "version": "1.0.0",
+  "description": "> **Important:** You must apply for access in order to use the Computer Use model. Apply here: https://aka.ms/oai/cuaaccess",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.51.1",
+    "@types/node": "^22.13.14"
+  }
+}
