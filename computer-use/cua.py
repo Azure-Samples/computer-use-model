@@ -105,9 +105,9 @@ class Agent:
         self.computer = computer
         self.logger = logger
         self.tools = {}
-        self.repsonse = None
         self.extra_headers = None
         self.parallel_tool_calls = False
+        self.start_task()
 
     def add_tool(self, tool: dict, func):
         name = tool["name"]
@@ -191,14 +191,14 @@ class Agent:
                     inputs.append(output)
                 elif item.type == "function_call":
                     tool_name = item.name
-                    tool_args = json.loads(item.arguments)
+                    kwargs = json.loads(item.arguments)
                     if tool_name not in self.tools:
                         raise ValueError(f"Unsupported tool '{tool_name}'.")
-                    tool, func = self.tools[tool_name]
+                    _, func = self.tools[tool_name]
                     if inspect.iscoroutinefunction(func):
-                        result = await func(**tool_args)
+                        result = await func(**kwargs)
                     else:
-                        result = func(**tool_args)
+                        result = func(**kwargs)
                     output = response_input_param.FunctionCallOutput(
                         type="function_call_output",
                         call_id=item.call_id,
