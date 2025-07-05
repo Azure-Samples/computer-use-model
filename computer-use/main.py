@@ -66,7 +66,7 @@ async def main():
             logger.info("")
             user_input = input("User: ")
         await agent.continue_task(user_input)
-        user_input = None
+        user_input = ""
         if agent.requires_consent and not args.autoplay:
             input("Press Enter to run computer tool...")
         elif agent.pending_safety_checks and not args.autoplay:

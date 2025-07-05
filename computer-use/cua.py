@@ -161,7 +161,11 @@ class Agent:
     def start_task(self):
         self.response = None
 
-    async def continue_task(self, user_message: str = "", temperature=None):
+    async def continue_task(
+        self,
+        input: str | openai.types.responses.response_input_param.ResponseInputParam,
+        temperature=None,
+    ):
         inputs = []
         screenshot = ""
         response_input_param = openai.types.responses.response_input_param
@@ -210,9 +214,10 @@ class Agent:
                 else:
                     message = (f"Unsupported response output type '{item.type}'.",)
                     raise NotImplementedError(message)
-        if user_message:
-            message = response_input_param.Message(role="user", content=user_message)
-            inputs.append(message)
+        if isinstance(input, str):
+            inputs.append(response_input_param.Message(role="user", content=input))
+        else:
+            inputs.extend(input)
         self.response = None
         wait = 0
         retry = 10
@@ -226,10 +231,10 @@ class Agent:
                     "previous_response_id": previous_response_id,
                     "tools": self.get_tools(),
                     "reasoning": {"generate_summary": "concise"},
-                    "temperature": temperature,
                     "truncation": "auto",
                     "extra_headers": self.extra_headers,
                     "parallel_tool_calls": self.parallel_tool_calls,
+                    **({} if temperature is None else {"temperature": temperature}),
                 }
                 if isinstance(self.client, openai.AsyncOpenAI):
                     self.response = await self.client.responses.create(**kwargs)
