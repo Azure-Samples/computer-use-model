@@ -106,6 +106,7 @@ class Agent:
         self.logger = logger
         self.tools = {}
         self.extra_headers = None
+        self.reasoning = {"generate_summary": "concise"}
         self.parallel_tool_calls = False
         self.start_task()
 
@@ -168,7 +169,6 @@ class Agent:
     ):
         inputs = []
         screenshot = ""
-        response_input_param = openai.types.responses.response_input_param
         previous_response = self.response
         previous_response_id = None
         if previous_response:
@@ -183,10 +183,10 @@ class Agent:
                         else:
                             result = method(**action_args)
                     screenshot = await self.computer.screenshot()
-                    output = response_input_param.ComputerCallOutput(
+                    output = openai.types.responses.response_input_param.ComputerCallOutput(
                         type="computer_call_output",
                         call_id=item.call_id,
-                        output=response_input_param.ResponseComputerToolCallOutputScreenshotParam(
+                        output=openai.types.responses.response_input_param.ResponseComputerToolCallOutputScreenshotParam(
                             type="computer_screenshot",
                             image_url=f"data:image/png;base64,{screenshot}",
                         ),
@@ -203,10 +203,12 @@ class Agent:
                         result = await func(**kwargs)
                     else:
                         result = func(**kwargs)
-                    output = response_input_param.FunctionCallOutput(
-                        type="function_call_output",
-                        call_id=item.call_id,
-                        output=json.dumps(result),
+                    output = (
+                        openai.types.responses.response_input_param.FunctionCallOutput(
+                            type="function_call_output",
+                            call_id=item.call_id,
+                            output=json.dumps(result),
+                        )
                     )
                     inputs.append(output)
                 elif item.type == "reasoning" or item.type == "message":
@@ -215,7 +217,12 @@ class Agent:
                     message = (f"Unsupported response output type '{item.type}'.",)
                     raise NotImplementedError(message)
         if isinstance(input, str):
-            inputs.append(response_input_param.Message(role="user", content=input))
+            inputs.append(
+                openai.types.responses.response_input_param.Message(
+                    role="user",
+                    content=input,
+                )
+            )
         else:
             inputs.extend(input)
         self.response = None
@@ -230,7 +237,7 @@ class Agent:
                     "input": inputs,
                     "previous_response_id": previous_response_id,
                     "tools": self.get_tools(),
-                    "reasoning": {"generate_summary": "concise"},
+                    "reasoning": self.reasoning,
                     "truncation": "auto",
                     "extra_headers": self.extra_headers,
                     "parallel_tool_calls": self.parallel_tool_calls,
