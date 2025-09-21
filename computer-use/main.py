@@ -9,9 +9,10 @@ import asyncio
 import logging
 import os
 
+import openai
+
 import cua
 import local_computer
-import openai
 
 
 async def main():
