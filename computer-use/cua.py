@@ -131,11 +131,6 @@ class Agent:
         return [check for item in items for check in item.pending_safety_checks]
 
     @property
-    def reasoning_summary(self):
-        items = [item for item in self.response.output if item.type == "reasoning"]
-        return "".join([summary.text for item in items for summary in item.summary])
-
-    @property
     def messages(self) -> list[str]:
         result: list[str] = []
         if self.response:
@@ -145,19 +140,6 @@ class Agent:
                         if content.type == "output_text":
                             result.append(content.text)
         return result
-
-    @property
-    def actions(self):
-        actions = []
-        for item in self.response.output:
-            if item.type == "computer_call":
-                action_args = vars(item.action) | {}
-                action = action_args.pop("type")
-                if action == "drag":
-                    path = [(point.x, point.y) for point in item.action.path]
-                    action_args["path"] = path
-                actions.append((action, action_args))
-        return actions
 
     def start_task(self):
         self.response = None
@@ -175,9 +157,13 @@ class Agent:
             previous_response_id = previous_response.id
             for item in previous_response.output:
                 if item.type == "computer_call":
-                    action, action_args = self.actions[0]
-                    method = getattr(self.computer, action)
+                    action_args = vars(item.action) | {}
+                    action = action_args.pop("type")
+                    if action == "drag":
+                        path = [(point.x, point.y) for point in action.path]
+                        action_args["path"] = path
                     if action != "screenshot":
+                        method = getattr(self.computer, action)
                         if inspect.iscoroutinefunction(method):
                             result = await method(**action_args)
                         else:
@@ -231,7 +217,6 @@ class Agent:
         while retry > 0:
             retry -= 1
             try:
-                await asyncio.sleep(wait)
                 kwargs = {
                     "model": self.model,
                     "input": inputs,
@@ -250,23 +235,30 @@ class Agent:
                 assert self.response.status == "completed"
                 return
             except openai.RateLimitError as e:
+                if retry <= 0:
+                    self.logger.exception("Rate limit exceeded.", exc_info=e)
+                    raise
                 match = re.search(r"Please try again in (\d+)s", e.message)
                 wait = int(match.group(1)) if match else 10
                 if self.logger:
-                    self.logger.exception(
+                    self.logger.warning(
                         f"Rate limit exceeded. Waiting for {wait} seconds.",
                         exc_info=e,
                     )
-                if retry == 0:
-                    raise
+                await asyncio.sleep(wait)
             except openai.InternalServerError as e:
-                if self.logger:
+                if retry <= 0:
                     self.logger.exception(
                         f"Internal server error: {e.message}",
                         exc_info=e,
                     )
-                if retry == 0:
                     raise
+                if self.logger:
+                    self.logger.warning(
+                        f"Internal server error: {e.message}",
+                        exc_info=e,
+                    )
+                await asyncio.sleep(wait)
 
     def get_tools(self) -> list[openai.types.responses.tool_param.ToolParam]:
         tools = [entry[0] for entry in self.tools.values()]

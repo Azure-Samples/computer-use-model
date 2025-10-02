@@ -73,14 +73,20 @@ async def main():
         elif agent.pending_safety_checks and not args.autoplay:
             logger.info(f"Safety checks: {agent.pending_safety_checks}")
             input("Press Enter to acknowledge and continue...")
-        if agent.reasoning_summary:
-            logger.info("")
-            logger.info(f"Action: {agent.reasoning_summary}")
-        for action, action_args in agent.actions:
-            logger.info(f"  {action} {action_args}")
-        if agent.messages:
-            logger.info("")
-            logger.info(f"Agent: {"".join(agent.messages)}")
+        for item in agent.response.output:
+            if item.type == "reasoning":
+                for summary in item.summary:
+                    logger.info("")
+                    logger.info(f"Action: {summary.text}")
+            elif item.type == "computer_call":
+                action_args = vars(item.action) | {}
+                action = action_args.pop("type")
+                if action == "drag":
+                    path = [(point.x, point.y) for point in action.path]
+                    action_args["path"] = path
+                logger.info(f"  {action} {action_args}")
+            elif item.type == "function_call":
+                logger.info(f"  {item.name}")
 
 if __name__ == "__main__":
     asyncio.run(main())
