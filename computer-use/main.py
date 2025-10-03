@@ -79,12 +79,13 @@ async def main():
                     logger.info("")
                     logger.info(f"Action: {summary.text}")
             elif item.type == "computer_call":
-                action_args = vars(item.action) | {}
-                action = action_args.pop("type")
-                if action == "drag":
+                action = item.action
+                action_args = vars(action) | {}
+                action_type = action_args.pop("type")
+                if action_type == "drag":
                     path = [(point.x, point.y) for point in action.path]
                     action_args["path"] = path
-                logger.info(f"  {action} {action_args}")
+                logger.info(f"  {action_type} {action_args}")
             elif item.type == "function_call":
                 logger.info(f"  {item.name}")
 
