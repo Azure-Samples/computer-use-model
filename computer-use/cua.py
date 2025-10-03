@@ -157,13 +157,14 @@ class Agent:
             previous_response_id = previous_response.id
             for item in previous_response.output:
                 if item.type == "computer_call":
-                    action_args = vars(item.action) | {}
-                    action = action_args.pop("type")
-                    if action == "drag":
+                    action = item.action
+                    action_args = vars(action) | {}
+                    action_type = action_args.pop("type")
+                    if action_type == "drag":
                         path = [(point.x, point.y) for point in action.path]
                         action_args["path"] = path
-                    if action != "screenshot":
-                        method = getattr(self.computer, action)
+                    if action_type != "screenshot":
+                        method = getattr(self.computer, action_type)
                         if inspect.iscoroutinefunction(method):
                             result = await method(**action_args)
                         else:
