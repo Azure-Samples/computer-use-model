@@ -77,7 +77,7 @@ python main.py --instructions "Open web browser and go to microsoft.com"
 ### Command Line Arguments
 
 * `--instructions`: The task to perform (default: "Open web browser and go to microsoft.com")
-* `--model`: The AI model to use (default: "computer-use-preview")
+* `--model`: The AI model to use (default: "gpt-5.4")
 * `--endpoint`: The API endpoint to use ("azure" or "openai", default: "azure")
 * `--autoplay`: Automatically execute actions without confirmation (default: true)
 

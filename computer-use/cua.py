@@ -106,7 +106,7 @@ class Agent:
         self.logger = logger
         self.tools = {}
         self.extra_headers = None
-        self.reasoning = {"generate_summary": "concise"}
+        self.reasoning = {"effort": "medium", "summary": "detailed"}
         self.parallel_tool_calls = False
         self.start_task()
 
@@ -127,8 +127,12 @@ class Agent:
 
     @property
     def pending_safety_checks(self):
+        safety_checks = []
         items = [item for item in self.response.output if item.type == "computer_call"]
-        return [check for item in items for check in item.pending_safety_checks]
+        for item in items:
+            if item.pending_safety_checks:
+                safety_checks.extend(item.pending_safety_checks)
+        return safety_checks
 
     @property
     def messages(self) -> list[str]:
@@ -157,18 +161,17 @@ class Agent:
             previous_response_id = previous_response.id
             for item in previous_response.output:
                 if item.type == "computer_call":
-                    action = item.action
-                    action_args = vars(action) | {}
-                    action_type = action_args.pop("type")
-                    if action_type == "drag":
-                        path = [(point.x, point.y) for point in action.path]
-                        action_args["path"] = path
-                    if action_type != "screenshot":
-                        method = getattr(self.computer, action_type)
-                        if inspect.iscoroutinefunction(method):
-                            result = await method(**action_args)
-                        else:
-                            result = method(**action_args)
+                    for action in item.actions:
+                        action_args = vars(action) | {}
+                        action_type = action_args.pop("type")
+                        if action_type == "drag":
+                            action_args["path"] = [(p.x, p.y) for p in action.path]
+                        if action_type != "screenshot":
+                            method = getattr(self.computer, action_type)
+                            if inspect.iscoroutinefunction(method):
+                                result = await method(**action_args)
+                            else:
+                                result = method(**action_args)
                     screenshot = await self.computer.screenshot()
                     output = openai.types.responses.response_input_param.ComputerCallOutput(
                         type="computer_call_output",
@@ -263,14 +266,5 @@ class Agent:
 
     def get_tools(self) -> list[openai.types.responses.tool_param.ToolParam]:
         tools = [entry[0] for entry in self.tools.values()]
-        return [self.computer_tool(), *tools]
-
-    def computer_tool(self) -> openai.types.responses.ComputerToolParam:
-        environment = self.computer.environment
-        dimensions = self.computer.dimensions
-        return openai.types.responses.ComputerToolParam(
-            type="computer_use_preview",
-            display_width=dimensions[0],
-            display_height=dimensions[1],
-            environment=environment,
-        )
+        computer_tool = openai.types.responses.ComputerToolParam(type="computer")
+        return [computer_tool, *tools]

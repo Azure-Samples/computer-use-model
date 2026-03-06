@@ -1,5 +1,5 @@
 """
-This is a basic example of how to use the CUA model along with the Responses API.
+This is a basic example of how to use GPT-5.4 computer tool with the Responses API.
 The code will run a loop taking screenshots and perform actions suggested by the model.
 Make sure to install the required packages before running the script.
 """
@@ -9,10 +9,9 @@ import asyncio
 import logging
 import os
 
-import openai
-
 import cua
 import local_computer
+import openai
 
 
 async def main():
@@ -25,8 +24,7 @@ async def main():
     parser.add_argument("--instructions", dest="instructions",
         default="Open web browser and go to microsoft.com.",
         help="Instructions to follow")
-    parser.add_argument("--model", dest="model",
-        default="computer-use-preview")
+    parser.add_argument("--model", dest="model", default="gpt-5.4")
     parser.add_argument("--endpoint", default="azure",
         help="The endpoint to use, either OpenAI or Azure OpenAI")
     parser.add_argument("--autoplay", dest="autoplay", action="store_true",
@@ -38,7 +36,7 @@ async def main():
         client = openai.AsyncAzureOpenAI(
             azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
             api_key=os.environ["AZURE_OPENAI_API_KEY"],
-            api_version="2025-03-01-preview",
+            api_version="2025-04-01-preview",
         )
     else:
         client = openai.AsyncOpenAI()
@@ -79,13 +77,12 @@ async def main():
                     logger.info("")
                     logger.info(f"Action: {summary.text}")
             elif item.type == "computer_call":
-                action = item.action
-                action_args = vars(action) | {}
-                action_type = action_args.pop("type")
-                if action_type == "drag":
-                    path = [(point.x, point.y) for point in action.path]
-                    action_args["path"] = path
-                logger.info(f"  {action_type} {action_args}")
+                for action in item.actions:
+                    action_args = vars(action) | {}
+                    action_type = action_args.pop("type")
+                    if action_type == "drag":
+                        action_args["path"] = [(p.x, p.y) for p in action.path]
+                    logger.info(f"  {action_type} {action_args}")
             elif item.type == "function_call":
                 logger.info(f"  {item.name}")
 
