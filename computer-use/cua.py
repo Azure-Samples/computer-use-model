@@ -126,15 +126,6 @@ class Agent:
         return any(item.type == "computer_call" for item in self.response.output)
 
     @property
-    def pending_safety_checks(self):
-        safety_checks = []
-        items = [item for item in self.response.output if item.type == "computer_call"]
-        for item in items:
-            if item.pending_safety_checks:
-                safety_checks.extend(item.pending_safety_checks)
-        return safety_checks
-
-    @property
     def messages(self) -> list[str]:
         result: list[str] = []
         if self.response:
@@ -179,8 +170,7 @@ class Agent:
                         output=openai.types.responses.response_input_param.ResponseComputerToolCallOutputScreenshotParam(
                             type="computer_screenshot",
                             image_url=f"data:image/png;base64,{screenshot}",
-                        ),
-                        acknowledged_safety_checks=self.pending_safety_checks,
+                        )
                     )
                     inputs.append(output)
                 elif item.type == "function_call":

@@ -68,9 +68,6 @@ async def main():
         user_input = ""
         if agent.requires_consent and not args.autoplay:
             input("Press Enter to run computer tool...")
-        elif agent.pending_safety_checks and not args.autoplay:
-            logger.info(f"Safety checks: {agent.pending_safety_checks}")
-            input("Press Enter to acknowledge and continue...")
         for item in agent.response.output:
             if item.type == "reasoning":
                 for summary in item.summary:
