@@ -25,15 +25,15 @@ class Scaler:
     @property
     def dimensions(self):
         if not self.size:
-            # If no dimensions are given, take a screenshot and scale to fit in 2048px
-            # https://platform.openai.com/docs/guides/images
+            # Scale to fit within 1440x900 while preserving aspect ratio
+            # 1440x900 recommended by OpenAI for computer use
+            # https://developers.openai.com/api/docs/guides/tools-computer-use
             width, height = self.computer.dimensions
-            max_size = 2048
-            longest = max(width, height)
-            if longest <= max_size:
+            max_width, max_height = 1440, 900
+            scale = min(max_width / width, max_height / height)
+            if scale >= 1:
                 self.size = (width, height)
             else:
-                scale = max_size / longest
                 self.size = (int(width * scale), int(height * scale))
         return self.size
 
@@ -170,6 +170,7 @@ class Agent:
                         output=openai.types.responses.response_input_param.ResponseComputerToolCallOutputScreenshotParam(
                             type="computer_screenshot",
                             image_url=f"data:image/png;base64,{screenshot}",
+                            detail="original",
                         )
                     )
                     inputs.append(output)
