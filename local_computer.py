@@ -13,18 +13,6 @@ class LocalComputer:
         self.size = None
 
     @property
-    def environment(self):
-        system = platform.system()
-        if system == "Windows":
-            return "windows"
-        elif system == "Darwin":
-            return "mac"
-        elif system == "Linux":
-            return "linux"
-        else:
-            raise NotImplementedError(f"Unsupported operating system: '{system}'")
-
-    @property
     def dimensions(self):
         if not self.size:
             screenshot = pyautogui.screenshot()

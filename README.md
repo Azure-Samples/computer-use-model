@@ -1,9 +1,6 @@
-# Computer Use Assistant (CUA)
-> **Important:** You must apply for access in order to use the Computer Use model. Apply here: https://aka.ms/oai/cuaaccess
+# GPT-5.4 Computer Use
 
-This is a sample repository demonstrating how to use the Computer Use model, an AI model capable of interacting with graphical user interfaces (GUIs) through natural language instructions. The Computer Use model can understand visual interfaces, take actions, and complete tasks by controlling a computer just like a human would.
-
-This framework provides a bridge between the Computer Use model and computer control, allowing for automated task execution while maintaining safety checks and user consent. It serves as a practical example of how to integrate the Computer Use model into applications that require GUI interaction.
+A sample application that uses GPT-5.4 Computer Use to control a computer through natural language instructions. It captures screenshots, analyzes the GUI, and performs mouse and keyboard actions to complete tasks — with support for safety checks, user consent, and both OpenAI and Azure OpenAI endpoints.
 
 ## Features
 
@@ -19,7 +16,7 @@ This framework provides a bridge between the Computer Use model and computer con
 
 ### Prerequisites
 
-* Python 3.7 or higher
+* Python 3.10 or higher
 * Operating System: Windows, macOS, or Linux
 * OpenAI API key or Azure OpenAI credentials
 
@@ -27,8 +24,8 @@ This framework provides a bridge between the Computer Use model and computer con
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
-cd computer-use
+git clone https://github.com/Azure-Samples/computer-use-model
+cd computer-use-model
 ```
 
 2. Install the required packages:
@@ -41,20 +38,20 @@ pip install -r requirements.txt
 **For macOS or Linux:**
 ```bash
 # Azure OpenAI
-export AZURE_OPENAI_ENDPOINT="your-azure-endpoint"
-export AZURE_OPENAI_API_KEY="your-azure-api-key"
+export AZURE_OPENAI_ENDPOINT="azure-endpoint"
+export AZURE_OPENAI_API_KEY="azure-api-key"
 
 # OpenAI
-export OPENAI_API_KEY="your-openai-api-key"
+export OPENAI_API_KEY="openai-api-key"
 ```
 **For Windows:**
 ```powershell
 # Azure OpenAI
-setx AZURE_OPENAI_ENDPOINT "your-azure-endpoint"
-setx AZURE_OPENAI_API_KEY "your-azure-api-key"
+setx AZURE_OPENAI_ENDPOINT "azure-endpoint"
+setx AZURE_OPENAI_API_KEY "azure-api-key"
 
 # OpenAI
-setx OPENAI_API_KEY "your-openai-api-key"
+setx OPENAI_API_KEY "openai-api-key"
 ```
 
 ## Usage
@@ -79,7 +76,6 @@ python main.py --instructions "Open web browser and go to microsoft.com"
 * `--instructions`: The task to perform (default: "Open web browser and go to microsoft.com")
 * `--model`: The AI model to use (default: "gpt-5.4")
 * `--endpoint`: The API endpoint to use ("azure" or "openai", default: "azure")
-* `--autoplay`: Automatically execute actions without confirmation (default: true)
 
 ### VM/Remote Control
 
@@ -89,25 +85,8 @@ For more information on VM automation with Playwright, please refer to:
 * [Playwright Documentation](https://playwright.dev/docs/intro)
 * [Playwright VM Setup Guide](https://playwright.dev/docs/ci-intro)
 
-## Demo
-
-The included demo application (`main.py`) demonstrates how to use the CUA framework:
-
-1. Start the demo:
-```bash
-python main.py
-```
-
-2. Enter your instructions when prompted, or use the `--instructions` parameter to provide them directly.
-
-3. Watch as the AI model:
-   - Captures and analyzes your screen
-   - Performs mouse and keyboard actions
-   - Requests consent for safety-critical operations
-   - Provides reasoning for its actions
-
 ## Resources
 
-* [OpenAI API Documentation](https://platform.openai.com/docs/api-reference)
+* [OpenAI API Computer Use Documentation](https://developers.openai.com/api/docs/guides/tools-computer-use)
 * [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
 * [PyAutoGUI Documentation](https://pyautogui.readthedocs.io/)
