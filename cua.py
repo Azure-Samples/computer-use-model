@@ -187,7 +187,7 @@ class Agent:
                 elif item.type == "reasoning" or item.type == "message":
                     pass
                 else:
-                    message = (f"Unsupported response output type '{item.type}'.",)
+                    message = f"Unsupported response output type '{item.type}'."
                     raise NotImplementedError(message)
         if isinstance(input, str):
             inputs.append(
@@ -223,7 +223,8 @@ class Agent:
                 return
             except openai.RateLimitError as e:
                 if retry <= 0:
-                    self.logger.exception("Rate limit exceeded.", exc_info=e)
+                    if self.logger:
+                        self.logger.exception("Rate limit exceeded.", exc_info=e)
                     raise
                 match = re.search(r"Please try again in (\d+)s", e.message)
                 wait = int(match.group(1)) if match else 10
@@ -235,14 +236,16 @@ class Agent:
                 await asyncio.sleep(wait)
             except openai.InternalServerError as e:
                 if retry <= 0:
-                    self.logger.exception(
-                        f"Internal server error: {e.message}",
-                        exc_info=e,
-                    )
+                    if self.logger:
+                        self.logger.exception(
+                            f"Internal server error: {e.message}",
+                            exc_info=e,
+                        )
                     raise
+                wait = max(wait, 10)
                 if self.logger:
                     self.logger.warning(
-                        f"Internal server error: {e.message}",
+                        f"Internal server error: {e.message}. Waiting for {wait} seconds.",
                         exc_info=e,
                     )
                 await asyncio.sleep(wait)
