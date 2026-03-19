@@ -24,8 +24,8 @@ A sample application that uses GPT-5.4 Computer Use to control a computer throug
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/Azure-Samples/computer-use-model
-cd computer-use-model
+git clone https://github.com/Azure-Samples/computer-use
+cd computer-use
 ```
 
 2. Install the required packages:
