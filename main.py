@@ -27,9 +27,6 @@ async def main():
     parser.add_argument("--model", dest="model", default="gpt-5.4")
     parser.add_argument("--endpoint", default="azure",
         help="The endpoint to use, either OpenAI or Azure OpenAI")
-    parser.add_argument("--autoplay", dest="autoplay", action="store_true",
-        default=True, help="Autoplay actions without confirmation")
-    parser.add_argument("--environment", dest="environment", default="linux")
     args = parser.parse_args()
 
     if args.endpoint == "azure":
@@ -66,8 +63,6 @@ async def main():
             user_input = input("User: ")
         await agent.continue_task(user_input)
         user_input = ""
-        if agent.requires_consent and not args.autoplay:
-            input("Press Enter to run computer tool...")
         for item in agent.response.output:
             if item.type == "reasoning":
                 for summary in item.summary:

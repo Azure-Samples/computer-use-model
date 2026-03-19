@@ -19,10 +19,6 @@ class Scaler:
         self.screen_height = -1
 
     @property
-    def environment(self):
-        return self.computer.environment
-
-    @property
     def dimensions(self):
         if not self.size:
             # Scale to fit within 1440x900 while preserving aspect ratio
@@ -120,10 +116,6 @@ class Agent:
             return True
         item = self.response.output[-1]
         return item.type == "message" and item.role == "assistant"
-
-    @property
-    def requires_consent(self) -> bool:
-        return any(item.type == "computer_call" for item in self.response.output)
 
     @property
     def messages(self) -> list[str]:
