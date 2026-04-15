@@ -77,6 +77,14 @@ async def main():
                     logger.info(f"  {action_type} {action_args}")
             elif item.type == "function_call":
                 logger.info(f"  {item.name}")
+            elif item.type == "message":
+                for content in item.content:
+                    text = getattr(content, "text", None)
+                    if text is None and getattr(content, "type", "") == "refusal":
+                        text = getattr(content, "refusal", None)
+                    if text:
+                        logger.info("")
+                        logger.info(f"Assistant: {text}")
 
 if __name__ == "__main__":
     asyncio.run(main())
