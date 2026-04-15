@@ -55,17 +55,17 @@ class Scaler:
         data = bytearray(buffer.getvalue())
         return base64.b64encode(data).decode("utf-8")
 
-    async def click(self, x: int, y: int, button: str = "left") -> None:
+    async def click(self, x: int, y: int, button: str = "left", keys: list[str] | None = None) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        await self.computer.click(x, y, button=button)
+        await self.computer.click(x, y, button=button, keys=keys)
 
-    async def double_click(self, x: int, y: int) -> None:
+    async def double_click(self, x: int, y: int, keys: list[str] | None = None) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        await self.computer.double_click(x, y)
+        await self.computer.double_click(x, y, keys=keys)
 
-    async def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
+    async def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int, keys: list[str] | None = None) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        await self.computer.scroll(x, y, scroll_x, scroll_y)
+        await self.computer.scroll(x, y, scroll_x, scroll_y, keys=keys)
 
     async def type(self, text: str) -> None:
         await self.computer.type(text)
@@ -73,16 +73,16 @@ class Scaler:
     async def wait(self, ms: int = 1000) -> None:
         await self.computer.wait(ms)
 
-    async def move(self, x: int, y: int) -> None:
+    async def move(self, x: int, y: int, keys: list[str] | None = None) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        await self.computer.move(x, y)
+        await self.computer.move(x, y, keys=keys)
 
     async def keypress(self, keys: list[str]) -> None:
         await self.computer.keypress(keys)
 
-    async def drag(self, path: list[tuple[int, int]]) -> None:
+    async def drag(self, path: list[tuple[int, int]], keys: list[str] | None = None) -> None:
         path = [self._point_to_screen_coords(*point) for point in path]
-        await self.computer.drag(path)
+        await self.computer.drag(path, keys=keys)
 
     def _point_to_screen_coords(self, x, y):
         width, height = self.dimensions
